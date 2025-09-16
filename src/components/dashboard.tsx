@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { Bluetooth, BluetoothConnected, BluetoothOff, Footprints, Zap, Bell, LoaderCircle } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
+import { Bluetooth, BluetoothConnected, BluetoothOff, Footprints, Zap, Bell, LoaderCircle, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -27,12 +28,19 @@ export default function Dashboard() {
   const [isBuzzerOn, setBuzzerOn] = useState(false);
   const { toast } = useToast();
 
+  const averagePower = useMemo(() => {
+    if (powerHistory.length === 0) return 0;
+    const total = powerHistory.reduce((acc, curr) => acc + curr.power, 0);
+    return total / powerHistory.length;
+  }, [powerHistory]);
+
   const handleConnect = () => {
     setStatus('connecting');
     toast({
       title: "Scanning for devices...",
       description: "Attempting to connect to StrideSync Shoe.",
     });
+    // Mocking connection to a BLE device
     setTimeout(() => {
       setStatus('connected');
       setSteps(0);
@@ -46,6 +54,8 @@ export default function Dashboard() {
   };
 
   const handleDisconnect = () => {
+    // Here you would also log the day's data to Firebase
+    // saveDailyDataToFirebase(steps, totalPowerCalculated);
     setStatus('disconnected');
     toast({
       title: "Disconnected",
@@ -63,6 +73,8 @@ export default function Dashboard() {
         return;
     }
     setBuzzerOn(checked);
+    // Mock sending command to BLE device
+    // writeToDevice(checked ? '1' : '0');
     toast({
         title: `Buzzer ${checked ? 'Activated' : 'Deactivated'}`,
         description: `The buzzer on your shoe has been turned ${checked ? 'on' : 'off'}.`,
@@ -72,6 +84,7 @@ export default function Dashboard() {
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined = undefined;
     if (status === 'connected') {
+      // Mock receiving data from BLE device
       interval = setInterval(() => {
         setSteps(prev => prev + Math.floor(Math.random() * 3) + 1);
         const newPower = parseFloat((Math.random() * 1.5 + 0.1).toFixed(2));
@@ -128,17 +141,23 @@ export default function Dashboard() {
           Stride<span className="text-primary">Sync</span>
         </h1>
         <div className="flex items-center gap-4">
+          <Link href="/history">
+            <Button variant="ghost" size="sm">
+              <History className="mr-2 h-4 w-4" />
+              History
+            </Button>
+          </Link>
           <StatusIndicator />
           <ConnectionButton />
         </div>
       </header>
       <main className="flex-1 space-y-8 p-4 md:p-8">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <StatCard
                 title="Real-time Steps"
                 value={steps.toLocaleString()}
                 icon={<Footprints className="h-5 w-5 text-muted-foreground" />}
-                description="Total steps taken in this session"
+                description="Total steps in this session"
                 status={status}
             />
             <StatCard
@@ -148,34 +167,34 @@ export default function Dashboard() {
                 description="Instantaneous power generation"
                 status={status}
             />
-             <Card className="lg:col-span-2">
-              <CardHeader className="pb-4">
-                <CardTitle>Device Controls</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between rounded-lg border p-3">
-                  <div className="flex items-center space-x-3">
-                    <Bell className="h-5 w-5" />
-                    <Label htmlFor="buzzer-switch" className="font-medium text-sm">
-                      Find My Shoe Buzzer
-                    </Label>
-                  </div>
-                  <Switch
-                    id="buzzer-switch"
-                    checked={isBuzzerOn}
-                    onCheckedChange={toggleBuzzer}
-                    aria-label="Toggle shoe buzzer"
-                  />
-                </div>
-              </CardContent>
-            </Card>
+            <StatCard
+                title="Average Power"
+                value={`${averagePower.toFixed(2)} W`}
+                icon={<Zap className="h-5 w-5 text-muted-foreground" />}
+                description="Avg. power this session"
+                status={status}
+            />
         </div>
         
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle>Power Generation History</CardTitle>
-                <CardDescription>Real-time energy harvested from your steps, in Watts (W).</CardDescription>
+              <CardHeader className="pb-4 flex flex-row items-center justify-between">
+                <div>
+                    <CardTitle>Device Controls</CardTitle>
+                    <CardDescription>Remote control your smart shoe.</CardDescription>
+                </div>
+                <div className="flex items-center space-x-3 rounded-lg border p-3">
+                    <Bell className="h-5 w-5" />
+                    <Label htmlFor="buzzer-switch" className="font-medium text-sm">
+                      Find My Shoe
+                    </Label>
+                    <Switch
+                        id="buzzer-switch"
+                        checked={isBuzzerOn}
+                        onCheckedChange={toggleBuzzer}
+                        aria-label="Toggle shoe buzzer"
+                    />
+                </div>
               </CardHeader>
               <CardContent>
                 <PowerChart data={powerHistory} status={status} />
@@ -183,8 +202,8 @@ export default function Dashboard() {
             </Card>
             <Card>
               <CardHeader>
-                <CardTitle>Daily Activity Log</CardTitle>
-                <CardDescription>Summary of your past activities.</CardDescription>
+                <CardTitle>Today's Activity Log</CardTitle>
+                <CardDescription>Summary of your recent sessions.</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
