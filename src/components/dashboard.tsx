@@ -2,10 +2,9 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
-import { Bluetooth, BluetoothConnected, BluetoothOff, Footprints, Zap, Bell, LoaderCircle, History } from 'lucide-react';
+import { Bluetooth, BluetoothConnected, BluetoothOff, Footprints, Zap, Bell, LoaderCircle, History, CircleDot, Circle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import PowerChart from './power-chart';
@@ -36,10 +35,6 @@ export default function Dashboard() {
 
   const handleConnect = () => {
     setStatus('connecting');
-    toast({
-      title: "Scanning for devices...",
-      description: "Attempting to connect to StrideSync Shoe.",
-    });
     // Mocking connection to a BLE device
     setTimeout(() => {
       setStatus('connected');
@@ -54,32 +49,13 @@ export default function Dashboard() {
   };
 
   const handleDisconnect = () => {
-    // Here you would also log the day's data to Firebase
-    // saveDailyDataToFirebase(steps, totalPowerCalculated);
+    // Here you would also log the day's data
     setStatus('disconnected');
     toast({
       title: "Disconnected",
       description: "Your StrideSync Shoe has been disconnected.",
     });
   };
-
-  const toggleBuzzer = (checked: boolean) => {
-    if (status !== 'connected') {
-        toast({
-            title: "Device not connected",
-            description: "Please connect to your shoe to control the buzzer.",
-            variant: "destructive",
-        });
-        return;
-    }
-    setBuzzerOn(checked);
-    // Mock sending command to BLE device
-    // writeToDevice(checked ? '1' : '0');
-    toast({
-        title: `Buzzer ${checked ? 'Activated' : 'Deactivated'}`,
-        description: `The buzzer on your shoe has been turned ${checked ? 'on' : 'off'}.`,
-    });
-  }
 
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined = undefined;
@@ -89,6 +65,10 @@ export default function Dashboard() {
         setSteps(prev => prev + Math.floor(Math.random() * 3) + 1);
         const newPower = parseFloat((Math.random() * 1.5 + 0.1).toFixed(2));
         setCurrentPower(newPower);
+        
+        // Mock buzzer status changing based on "object detection"
+        setBuzzerOn(Math.random() > 0.8); 
+
         setPowerHistory(prev => {
             const now = new Date();
             const time = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -97,6 +77,8 @@ export default function Dashboard() {
             return newHistory.length > 30 ? newHistory.slice(1) : newHistory;
         });
       }, 1500);
+    } else {
+        setBuzzerOn(false);
     }
     return () => {
       if (interval) {
@@ -180,20 +162,25 @@ export default function Dashboard() {
             <Card className="lg:col-span-2">
               <CardHeader className="pb-4 flex flex-row items-center justify-between">
                 <div>
-                    <CardTitle>Device Controls</CardTitle>
-                    <CardDescription>Remote control your smart shoe.</CardDescription>
+                    <CardTitle>Live Session Data</CardTitle>
+                    <CardDescription>Real-time power generation from your shoe.</CardDescription>
                 </div>
                 <div className="flex items-center space-x-3 rounded-lg border p-3">
                     <Bell className="h-5 w-5" />
-                    <Label htmlFor="buzzer-switch" className="font-medium text-sm">
-                      Find My Shoe
+                    <Label htmlFor="buzzer-status" className="font-medium text-sm">
+                      Object Detection
                     </Label>
-                    <Switch
-                        id="buzzer-switch"
-                        checked={isBuzzerOn}
-                        onCheckedChange={toggleBuzzer}
-                        aria-label="Toggle shoe buzzer"
-                    />
+                    <div id="buzzer-status" className="flex items-center gap-2">
+                        {isBuzzerOn ? (
+                            <span className="relative flex h-3 w-3">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-3 w-3 bg-accent"></span>
+                            </span>
+                        ) : (
+                            <span className="relative inline-flex rounded-full h-3 w-3 bg-muted"></span>
+                        )}
+                        <span className="text-xs text-muted-foreground">{isBuzzerOn ? "Active" : "Inactive"}</span>
+                    </div>
                 </div>
               </CardHeader>
               <CardContent>
@@ -231,3 +218,5 @@ export default function Dashboard() {
     </div>
   );
 }
+
+    
