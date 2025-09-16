@@ -6,6 +6,7 @@ import { Bluetooth, BluetoothConnected, BluetoothOff, Footprints, Zap, Bell, Loa
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import PowerChart from './power-chart';
 import StatCard from './stat-card';
@@ -25,6 +26,7 @@ export default function Dashboard() {
   const [currentPower, setCurrentPower] = useState(0);
   const [powerHistory, setPowerHistory] = useState<{ time: string; power: number }[]>([]);
   const [isBuzzerOn, setBuzzerOn] = useState(false);
+  const [isBuzzerEnabled, setBuzzerEnabled] = useState(true);
   const { toast } = useToast();
 
   const averagePower = useMemo(() => {
@@ -56,6 +58,13 @@ export default function Dashboard() {
       description: "Your StrideSync Shoe has been disconnected.",
     });
   };
+  
+  // In a real app, this function would send a command to the Arduino
+  const handleBuzzerToggle = (enabled: boolean) => {
+    setBuzzerEnabled(enabled);
+    console.log(`Buzzer ${enabled ? 'enabled' : 'disabled'}`);
+    // Example: writeToDevice(enabled ? 'BUZZER_ON' : 'BUZZER_OFF');
+  };
 
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined = undefined;
@@ -66,8 +75,10 @@ export default function Dashboard() {
         const newPower = parseFloat((Math.random() * 1.5 + 0.1).toFixed(2));
         setCurrentPower(newPower);
         
-        // Mock buzzer status changing based on "object detection"
-        setBuzzerOn(Math.random() > 0.8); 
+        // Mock object detection from sensor
+        const isObjectDetected = Math.random() > 0.8;
+        // Buzzer is active only if it's enabled AND an object is detected
+        setBuzzerOn(isBuzzerEnabled && isObjectDetected); 
 
         setPowerHistory(prev => {
             const now = new Date();
@@ -85,7 +96,7 @@ export default function Dashboard() {
         clearInterval(interval);
       }
     };
-  }, [status]);
+  }, [status, isBuzzerEnabled]);
   
   const ConnectionButton = () => (
     status === 'connected' ? (
@@ -167,20 +178,20 @@ export default function Dashboard() {
                 </div>
                 <div className="flex items-center space-x-3 rounded-lg border p-3">
                     <Bell className="h-5 w-5" />
-                    <Label htmlFor="buzzer-status" className="font-medium text-sm">
-                      Object Detection
-                    </Label>
-                    <div id="buzzer-status" className="flex items-center gap-2">
-                        {isBuzzerOn ? (
-                            <span className="relative flex h-3 w-3">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-3 w-3 bg-accent"></span>
-                            </span>
-                        ) : (
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-muted"></span>
-                        )}
-                        <span className="text-xs text-muted-foreground">{isBuzzerOn ? "Active" : "Inactive"}</span>
+                    <div className='flex flex-col space-y-1'>
+                      <Label htmlFor="buzzer-control" className="font-medium text-sm">
+                        Buzzer Control
+                      </Label>
+                      <div id="buzzer-status" className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {isBuzzerOn ? "Object Detected" : "Clear"}
+                      </div>
                     </div>
+                    <Switch
+                        id="buzzer-control"
+                        checked={isBuzzerEnabled}
+                        onCheckedChange={handleBuzzerToggle}
+                        aria-label="Toggle buzzer"
+                    />
                 </div>
               </CardHeader>
               <CardContent>
@@ -218,5 +229,3 @@ export default function Dashboard() {
     </div>
   );
 }
-
-    
