@@ -1,9 +1,9 @@
 "use client";
 
-import type { ReactNode } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import type { ConnectionStatus } from './dashboard';
+import type { ReactNode } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import type { ConnectionStatus } from "@/lib/bluetooth-service";
 
 interface StatCardProps {
   title: string;
@@ -13,8 +13,14 @@ interface StatCardProps {
   status: ConnectionStatus;
 }
 
-export default function StatCard({ title, value, icon, description, status }: StatCardProps) {
-  const isLoading = status !== 'connected';
+export default function StatCard({
+  title,
+  value,
+  icon,
+  description,
+  status,
+}: StatCardProps) {
+  const isLoading = status !== "connected";
 
   return (
     <Card>
@@ -24,9 +30,9 @@ export default function StatCard({ title, value, icon, description, status }: St
       </CardHeader>
       <CardContent>
         {isLoading ? (
-            <Skeleton className="h-10 w-3/4 mt-1" />
+          <Skeleton className="h-10 w-3/4 mt-1" />
         ) : (
-            <div className="text-3xl font-bold text-primary">{value}</div>
+          <div className="text-3xl font-bold text-primary">{value}</div>
         )}
         <p className="text-xs text-muted-foreground pt-1">{description}</p>
       </CardContent>
