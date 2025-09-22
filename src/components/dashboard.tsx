@@ -100,12 +100,12 @@ export default function Dashboard() {
   
   const ConnectionButton = () => (
     status === 'connected' ? (
-      <Button onClick={handleDisconnect} variant="outline" size="sm">
+      <Button onClick={handleDisconnect} variant="outline" size="sm" className="w-full sm:w-auto">
         <BluetoothOff className="mr-2 h-4 w-4" />
         Disconnect
       </Button>
     ) : (
-      <Button onClick={handleConnect} disabled={status === 'connecting'} size="sm">
+      <Button onClick={handleConnect} disabled={status === 'connecting'} size="sm" className="w-full sm:w-auto">
         {status === 'connecting' ? (
           <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
         ) : (
@@ -119,28 +119,30 @@ export default function Dashboard() {
   const StatusIndicator = () => {
     switch (status) {
       case 'connected':
-        return <div className="flex items-center gap-2 text-sm font-medium text-primary"><BluetoothConnected className="h-4 w-4" />Connected</div>;
+        return <div className="flex items-center justify-center gap-2 text-sm font-medium text-primary"><BluetoothConnected className="h-4 w-4" />Connected</div>;
       case 'connecting':
-        return <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" />Connecting...</div>;
+        return <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" />Connecting...</div>;
       default:
-        return <div className="flex items-center gap-2 text-sm text-muted-foreground"><BluetoothOff className="h-4 w-4" />Disconnected</div>;
+        return <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground"><BluetoothOff className="h-4 w-4" />Disconnected</div>;
     }
   };
 
   return (
     <div className="flex min-h-screen w-full flex-col">
-      <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b bg-background/95 px-4 backdrop-blur md:px-8">
-        <h1 className="text-2xl font-extrabold tracking-tight lg:text-3xl">
+      <header className="sticky top-0 z-30 flex h-auto shrink-0 flex-col items-center justify-between gap-4 border-b bg-background/95 p-4 backdrop-blur sm:h-16 sm:flex-row sm:px-8">
+        <h1 className="text-2xl font-extrabold tracking-tight text-center sm:text-left lg:text-3xl">
           Stride<span className="text-primary">Sync</span>
         </h1>
-        <div className="flex items-center gap-4">
-          <Link href="/history">
-            <Button variant="ghost" size="sm">
+        <div className="flex w-full flex-col items-center gap-2 sm:w-auto sm:flex-row sm:gap-4">
+          <Link href="/history" className="w-full sm:w-auto">
+            <Button variant="ghost" size="sm" className="w-full">
               <History className="mr-2 h-4 w-4" />
               History
             </Button>
           </Link>
-          <StatusIndicator />
+          <div className="w-full sm:w-auto">
+            <StatusIndicator />
+          </div>
           <ConnectionButton />
         </div>
       </header>
@@ -171,19 +173,18 @@ export default function Dashboard() {
         
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
             <Card className="lg:col-span-2">
-              <CardHeader className="pb-4 flex flex-row items-center justify-between">
+              <CardHeader className="pb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
                     <CardTitle>Live Session Data</CardTitle>
                     <CardDescription>Real-time power generation from your shoe.</CardDescription>
                 </div>
-                <div className="flex items-center space-x-3 rounded-lg border p-3">
-                    <Bell className="h-5 w-5" />
-                    <div className='flex flex-col space-y-1'>
-                      <Label htmlFor="buzzer-control" className="font-medium text-sm">
-                        Buzzer Control
-                      </Label>
-                      <div id="buzzer-status" className="flex items-center gap-2 text-xs text-muted-foreground">
-                          {isBuzzerOn ? "Object Detected" : "Clear"}
+                <div className="flex w-full sm:w-auto items-center justify-between sm:justify-start space-x-3 rounded-lg border p-3">
+                    <div className="flex items-center space-x-3">
+                      <Bell className="h-5 w-5" />
+                      <div className='flex flex-col space-y-1'>
+                        <Label htmlFor="buzzer-control" className="font-medium text-sm whitespace-nowrap">
+                          Buzzer Active
+                        </Label>
                       </div>
                     </div>
                     <Switch
@@ -194,7 +195,24 @@ export default function Dashboard() {
                     />
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span className="font-medium text-foreground">Object Detection:</span>
+                    {isBuzzerOn ? (
+                      <div className="flex items-center gap-2 text-accent">
+                        <span className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-accent"></span>
+                        </span>
+                        Active
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Circle className="h-3 w-3 fill-muted text-muted" />
+                        Inactive
+                      </div>
+                    )}
+                  </div>
                 <PowerChart data={powerHistory} status={status} />
               </CardContent>
             </Card>
@@ -204,7 +222,22 @@ export default function Dashboard() {
                 <CardDescription>Summary of your recent sessions.</CardDescription>
               </CardHeader>
               <CardContent>
-                <Table>
+                <div className="block md:hidden">
+                    {activityLog.map((log) => (
+                      <div key={log.date} className="mb-4 rounded-lg border p-4 text-sm">
+                        <div className="flex justify-between font-medium">{log.date}</div>
+                        <div className="mt-2 flex justify-between">
+                            <span className="text-muted-foreground">Steps:</span>
+                            <span>{log.steps.toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span className="text-muted-foreground">Power:</span>
+                            <span className="text-right">{log.power}</span>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+                <Table className="hidden md:table">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Date</TableHead>

@@ -13,6 +13,8 @@ const historicalData = [
     { date: '2025-09-13', total_steps: 12098, total_power: 1.5 },
     { date: '2025-09-12', total_steps: 7543, total_power: 0.8 },
     { date: '2025-09-11', total_steps: 11201, total_power: 1.3 },
+    { date: '2025-09-10', total_steps: 9500, total_power: 1.1 },
+    { date: '2025-09-09', total_steps: 13050, total_power: 1.7 },
 ];
 
 export default function HistoryPage() {
@@ -25,7 +27,7 @@ export default function HistoryPage() {
                     <ArrowLeft className="h-4 w-4" />
                 </Button>
             </Link>
-            <h1 className="text-2xl font-extrabold tracking-tight lg:text-3xl">
+            <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl lg:text-3xl">
                 Activity <span className="text-primary">History</span>
             </h1>
         </div>
@@ -39,7 +41,22 @@ export default function HistoryPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Table>
+             <div className="block md:hidden">
+                {historicalData.map((data) => (
+                  <div key={data.date} className="mb-4 rounded-lg border p-4 text-sm">
+                    <div className="flex justify-between font-medium">{data.date}</div>
+                    <div className="mt-2 flex justify-between">
+                        <span className="text-muted-foreground">Total Steps:</span>
+                        <span>{data.total_steps.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Total Power (kWh):</span>
+                        <span className="text-right">{data.total_power.toFixed(2)}</span>
+                    </div>
+                  </div>
+                ))}
+            </div>
+            <Table className="hidden md:table">
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
