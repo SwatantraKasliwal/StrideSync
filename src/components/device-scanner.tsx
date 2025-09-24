@@ -23,6 +23,9 @@ import {
   BluetoothSearching,
   Smartphone,
   AlertTriangle,
+  CheckCircle,
+  XCircle,
+  BluetoothConnected,
 } from "lucide-react";
 import {
   bluetoothService,
@@ -43,6 +46,7 @@ export default function DeviceScanner({
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState<BluetoothDeviceInfo[]>([]);
   const [scanError, setScanError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<string>("");
   const { toast } = useToast();
 
   const handleScan = async () => {
@@ -51,18 +55,28 @@ export default function DeviceScanner({
     setDevices([]);
 
     try {
+      console.log("DeviceScanner: Starting scan...");
       const foundDevices = await bluetoothService.scanForDevices();
-      setDevices(foundDevices);
 
       if (foundDevices.length === 0) {
         setScanError(
           "No Bluetooth devices found. Make sure Bluetooth is enabled and your device is discoverable."
         );
       } else {
+        console.log("DeviceScanner: Device found, auto-connecting...");
+        const device = foundDevices[0];
+
+        // Show success and auto-connect
         toast({
-          title: "Device Found!",
-          description: `Found: ${foundDevices[0].name}`,
+          title: "✅ Device Found!",
+          description: `Found: ${device.name}. Connecting automatically...`,
+          duration: 3000,
         });
+
+        // Auto-connect to the found device
+        setTimeout(() => {
+          handleDeviceSelect(device);
+        }, 500); // Small delay to show the success message
       }
     } catch (error) {
       let errorMessage = "Failed to scan for devices";
@@ -70,7 +84,7 @@ export default function DeviceScanner({
       if (error instanceof Error) {
         if (error.message.includes("cancelled")) {
           errorMessage =
-            "Device selection was cancelled. Please try again and select a device from the list.";
+            "Device selection was cancelled. Please try again and select a device from the browser popup.";
         } else if (error.message.includes("not supported")) {
           errorMessage =
             "Web Bluetooth is not supported in this browser. Please use Chrome, Edge, or Opera.";
@@ -81,23 +95,29 @@ export default function DeviceScanner({
 
       setScanError(errorMessage);
       toast({
-        title: "Scan Failed",
+        title: "❌ Scan Failed",
         description: errorMessage,
         variant: "destructive",
+        duration: 5000,
       });
     } finally {
       setIsScanning(false);
     }
   };
 
-  const handleDeviceSelect = (device: BluetoothDeviceInfo) => {
+  const handleDeviceSelect = async (device: BluetoothDeviceInfo) => {
+    console.log("DeviceScanner: Selecting device:", device.name);
+
+    // Let the dashboard handle all connection logic and status updates
     onDeviceSelected(device);
     setIsOpen(false);
     setDevices([]);
     setScanError(null);
+    setConnectionStatus(""); // Clear any previous status
   };
-
   const handleTestMode = () => {
+    console.log("DeviceScanner: Test Mode button clicked");
+
     // Create a fake device for testing
     const testDevice: BluetoothDeviceInfo = {
       id: "test-device-12345",
@@ -105,17 +125,23 @@ export default function DeviceScanner({
       connected: false,
     };
 
+    console.log("DeviceScanner: Created test device:", testDevice);
+
+    // Show connecting message
+    toast({
+      title: "🎯 Test Mode",
+      description: "Connecting to simulated device...",
+      duration: 2000,
+    });
+
+    // Let the dashboard handle all connection logic and status updates
+    console.log("DeviceScanner: Calling onDeviceSelected with test device");
     onDeviceSelected(testDevice);
     setIsOpen(false);
     setDevices([]);
     setScanError(null);
-
-    toast({
-      title: "Test Mode",
-      description: "Connected to simulated StrideSync device for testing",
-    });
+    setConnectionStatus(""); // Clear any previous status
   };
-
   const handleOpenChange = (open: boolean) => {
     setIsOpen(open);
     if (!open) {
@@ -209,6 +235,54 @@ export default function DeviceScanner({
                     </p>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Connection Status */}
+          {connectionStatus && (
+            <Card
+              className={
+                connectionStatus.includes("Successfully") ||
+                connectionStatus.includes("✅")
+                  ? "border-green-500/50 bg-green-50/50"
+                  : connectionStatus.includes("failed") ||
+                    connectionStatus.includes("❌")
+                  ? "border-red-500/50 bg-red-50/50"
+                  : "border-blue-500/50 bg-blue-50/50"
+              }
+            >
+              <CardContent className="flex items-center gap-3 pt-6">
+                <div
+                  className={
+                    connectionStatus.includes("Connecting")
+                      ? "animate-pulse"
+                      : ""
+                  }
+                >
+                  {connectionStatus.includes("Successfully") ||
+                  connectionStatus.includes("✅") ? (
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  ) : connectionStatus.includes("failed") ||
+                    connectionStatus.includes("❌") ? (
+                    <XCircle className="h-5 w-5 text-red-600" />
+                  ) : (
+                    <BluetoothConnected className="h-5 w-5 text-blue-600" />
+                  )}
+                </div>
+                <p
+                  className={`text-sm font-medium ${
+                    connectionStatus.includes("Successfully") ||
+                    connectionStatus.includes("✅")
+                      ? "text-green-700"
+                      : connectionStatus.includes("failed") ||
+                        connectionStatus.includes("❌")
+                      ? "text-red-700"
+                      : "text-blue-700"
+                  }`}
+                >
+                  {connectionStatus}
+                </p>
               </CardContent>
             </Card>
           )}

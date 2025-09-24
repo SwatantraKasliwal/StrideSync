@@ -13,6 +13,7 @@ import {
   History,
   CircleDot,
   Circle,
+  CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -75,12 +76,32 @@ export default function Dashboard() {
   // Setup Bluetooth service callbacks
   useEffect(() => {
     bluetoothService.setStatusCallback((newStatus) => {
+      console.log("Dashboard: Status callback received:", newStatus);
       setStatus(newStatus);
 
       if (newStatus === "connected") {
         setSessionStartTime(new Date());
         const deviceInfo = bluetoothService.getDeviceInfo();
         setConnectedDevice(deviceInfo);
+        console.log("Dashboard: Device info:", deviceInfo);
+
+        // Show connection success toast
+        if (deviceInfo?.name === "Test StrideSync Device") {
+          toast({
+            title: "🎯 Test Mode Connected!",
+            description:
+              "Successfully connected to simulated StrideSync device. Test data is now streaming.",
+            duration: 4000,
+          });
+        } else {
+          toast({
+            title: "✅ Device Connected!",
+            description: `Successfully connected to ${
+              deviceInfo?.name || "device"
+            }. Ready to receive real-time data.`,
+            duration: 4000,
+          });
+        }
       } else if (newStatus === "disconnected") {
         setConnectedDevice(null);
         setSessionStartTime(null);
@@ -89,10 +110,19 @@ export default function Dashboard() {
         setCurrentPower(0);
         setPowerHistory([]);
         setBuzzerOn(false);
+      } else if (newStatus === "error") {
+        toast({
+          title: "❌ Connection Failed",
+          description: "Unable to connect to the device. Please try again.",
+          variant: "destructive",
+          duration: 5000,
+        });
       }
     });
 
     bluetoothService.setDataCallback((data: StrideData) => {
+      console.log("Dashboard: Received data from bluetooth service:", data);
+
       // Update real-time data from the device
       setSteps(data.steps);
       setCurrentPower(data.power);
@@ -111,6 +141,13 @@ export default function Dashboard() {
         const newHistory = [...prev, newEntry];
         return newHistory.length > 30 ? newHistory.slice(1) : newHistory;
       });
+
+      console.log(
+        "Dashboard: Updated state - steps:",
+        data.steps,
+        "power:",
+        data.power
+      );
     });
 
     return () => {
@@ -122,36 +159,57 @@ export default function Dashboard() {
 
   const handleDeviceSelected = async (device: BluetoothDeviceInfo) => {
     try {
+      console.log(
+        "Dashboard: Connecting to device:",
+        device.name,
+        "ID:",
+        device.id
+      );
+
       // Check if this is a test device
       if (device.id === "test-device-12345") {
+        console.log(
+          "Dashboard: Detected test device, calling connectTestDevice()"
+        );
         await bluetoothService.connectTestDevice();
+        console.log("Dashboard: Test device connection successful");
       } else {
+        console.log(
+          "Dashboard: Detected real device, first scanning then connecting"
+        );
+        // For real devices, we need to scan first to select the device
+        // The device scanner component already does this, so we can directly connect
+        // since the device should already be selected from the scan
         await bluetoothService.connect();
       }
-      toast({
-        title: "Connection Successful",
-        description: `Connected to ${device.name}`,
-      });
+
+      console.log("Dashboard: Connection call completed for", device.name);
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Connection failed";
-      toast({
-        title: "Connection Failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
+      console.error("Dashboard: Connection failed:", errorMessage);
+
+      // The status callback will handle the error toast, but we can add additional info here
+      console.log("Dashboard: Connection error details:", errorMessage);
     }
   };
-
   const handleDisconnect = async () => {
     try {
+      const deviceName = connectedDevice?.name || "device";
       await bluetoothService.disconnect();
       toast({
-        title: "Disconnected",
-        description: "Your StrideSync device has been disconnected.",
+        title: "🔌 Device Disconnected",
+        description: `Successfully disconnected from ${deviceName}.`,
+        duration: 3000,
       });
+      console.log("Dashboard: Device disconnected successfully");
     } catch (error) {
-      console.error("Disconnect error:", error);
+      console.error("Dashboard: Disconnect error:", error);
+      toast({
+        title: "⚠️ Disconnect Error",
+        description: "There was an issue disconnecting from the device.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -349,30 +407,37 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="space-y-4">
               {status === "disconnected" && (
-                <div className="text-center py-8 border-2 border-dashed border-muted rounded-lg">
-                  <Bluetooth className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-lg font-medium mb-2">
-                    Connect Your StrideSync Device
+                <div className="text-center py-8 border-2 border-dashed border-blue-200 bg-blue-50/50 rounded-lg">
+                  <Bluetooth className="h-12 w-12 mx-auto text-blue-600 mb-4" />
+                  <p className="text-lg font-medium mb-2 text-blue-900">
+                    🔗 Connect Your StrideSync Device
                   </p>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Scan for and connect to your smart shoe to start tracking
-                    your activity and power generation.
+                  <p className="text-sm text-blue-700 mb-4">
+                    Ready to connect! Scan for your smart shoe or use test mode
+                    to start tracking your activity and power generation.
                   </p>
                   <DeviceScanner
                     onDeviceSelected={handleDeviceSelected}
                     disabled={false}
                   />
+                  <p className="text-xs text-blue-600 mt-3">
+                    💡 <strong>Quick tip:</strong> Use "Test Mode" for instant
+                    demo data!
+                  </p>
                 </div>
               )}
 
               {status === "connecting" && (
-                <div className="text-center py-8">
-                  <LoaderCircle className="h-12 w-12 mx-auto text-primary animate-spin mb-4" />
-                  <p className="text-lg font-medium mb-2">
-                    Connecting to Device
+                <div className="text-center py-8 border-2 border-dashed border-yellow-200 bg-yellow-50/50 rounded-lg">
+                  <LoaderCircle className="h-12 w-12 mx-auto text-yellow-600 animate-spin mb-4" />
+                  <p className="text-lg font-medium mb-2 text-yellow-900">
+                    🔄 Connecting to Device
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-yellow-700 mb-2">
                     Establishing connection with your StrideSync device...
+                  </p>
+                  <p className="text-xs text-yellow-600">
+                    This may take a few seconds. Please wait...
                   </p>
                 </div>
               )}
@@ -396,6 +461,29 @@ export default function Dashboard() {
 
               {status === "connected" && (
                 <>
+                  {/* Connection Success Banner */}
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0">
+                        <CheckCircle className="h-6 w-6 text-green-600" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="font-medium text-green-800">
+                          ✅ Successfully Connected!
+                        </p>
+                        <p className="text-sm text-green-700">
+                          {connectedDevice?.name || "Your device"} is now
+                          streaming real-time data.
+                          {sessionStartTime && (
+                            <span className="ml-2">
+                              Connected for {sessionDuration}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span className="font-medium text-foreground">
                       Object Detection:

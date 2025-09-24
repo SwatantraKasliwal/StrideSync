@@ -111,28 +111,73 @@ export class StrideBluetoothService implements IBluetoothService {
         throw new Error("Bluetooth is not supported in this environment");
       }
 
-      // Simple approach: Just use acceptAllDevices to find ANY Bluetooth device
-      const device = await navigator.bluetooth!.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: [
-          this.HC05_SERVICE_UUID,
-          this.FITNESS_MACHINE_SERVICE_UUID,
-          this.GENERIC_ACCESS_SERVICE_UUID,
-          this.BATTERY_SERVICE_UUID,
-          "device_information",
-          "generic_access",
-          "battery_service",
-          "heart_rate",
-          "0000180a-0000-1000-8000-00805f9b34fb", // Device Information
-          "0000180f-0000-1000-8000-00805f9b34fb", // Battery Service
-        ],
-      });
+      console.log("BluetoothService: Starting device scan...");
+
+      // Try to find HC-05 devices with specific service UUID first
+      let device: BluetoothDevice;
+
+      try {
+        console.log(
+          "BluetoothService: Attempting to scan for HC-05 devices..."
+        );
+        device = await navigator.bluetooth!.requestDevice({
+          filters: [
+            { services: [this.HC05_SERVICE_UUID] },
+            { name: "HI TECH" },
+            { namePrefix: "HC-" },
+            { namePrefix: "BT-" },
+          ],
+          optionalServices: [
+            this.HC05_SERVICE_UUID,
+            this.FITNESS_MACHINE_SERVICE_UUID,
+            this.GENERIC_ACCESS_SERVICE_UUID,
+            this.BATTERY_SERVICE_UUID,
+            "device_information",
+            "generic_access",
+            "battery_service",
+            "heart_rate",
+            "0000180a-0000-1000-8000-00805f9b34fb", // Device Information
+            "0000180f-0000-1000-8000-00805f9b34fb", // Battery Service
+          ],
+        });
+        console.log("BluetoothService: Found HC-05 device:", device.name);
+      } catch (firstError) {
+        console.log(
+          "BluetoothService: HC-05 scan failed, trying acceptAllDevices..."
+        );
+        // Fallback to accepting all devices
+        device = await navigator.bluetooth!.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [
+            this.HC05_SERVICE_UUID,
+            this.FITNESS_MACHINE_SERVICE_UUID,
+            this.GENERIC_ACCESS_SERVICE_UUID,
+            this.BATTERY_SERVICE_UUID,
+            "device_information",
+            "generic_access",
+            "battery_service",
+            "heart_rate",
+            "0000180a-0000-1000-8000-00805f9b34fb", // Device Information
+            "0000180f-0000-1000-8000-00805f9b34fb", // Battery Service
+          ],
+        });
+      }
+
+      // Store the selected device for later connection
+      this.device = device;
 
       // Generate a friendly name if none provided
       let deviceName = device.name;
       if (!deviceName || deviceName.trim() === "") {
         deviceName = this.getDeviceTypeFromId(device.id);
       }
+
+      console.log(
+        "BluetoothService: Device selected:",
+        deviceName,
+        "ID:",
+        device.id
+      );
 
       return [
         {
@@ -142,7 +187,7 @@ export class StrideBluetoothService implements IBluetoothService {
         },
       ];
     } catch (error) {
-      console.error("Error scanning for devices:", error);
+      console.error("BluetoothService: Error scanning for devices:", error);
       if (error instanceof Error && error.message.includes("User cancelled")) {
         throw new Error(
           "Device selection was cancelled. Please try again and select a device."
@@ -185,14 +230,17 @@ export class StrideBluetoothService implements IBluetoothService {
 
   /**
    * Connect to a test device (for testing without real Bluetooth)
-  /**
-   * Connect to a test device (for testing without real Bluetooth)
    */
   async connectTestDevice(): Promise<void> {
     try {
+      console.log("BluetoothService: connectTestDevice() called");
+      console.log(
+        "BluetoothService: Calling status callback with 'connecting'"
+      );
       this.statusCallback?.("connecting");
 
       // Simulate connection delay
+      console.log("BluetoothService: Simulating connection delay...");
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       // Set up test device
@@ -200,12 +248,14 @@ export class StrideBluetoothService implements IBluetoothService {
       this.server = null; // No real server
 
       // Start test simulation
+      console.log("BluetoothService: Starting mobile simulation...");
       this.startMobileSimulation();
 
+      console.log("BluetoothService: Calling status callback with 'connected'");
       this.statusCallback?.("connected");
-      console.log("Test device connected successfully");
+      console.log("BluetoothService: Test device connected successfully");
     } catch (error) {
-      console.error("Test connection failed:", error);
+      console.error("BluetoothService: Test connection failed:", error);
       this.statusCallback?.("error");
       throw new Error("Test connection failed");
     }
@@ -216,29 +266,20 @@ export class StrideBluetoothService implements IBluetoothService {
    */
   async connect(): Promise<void> {
     try {
+      console.log("BluetoothService: Starting connection process...");
       this.statusCallback?.("connecting");
 
       if (!this.checkBluetoothSupport()) {
         throw new Error("Bluetooth is not supported in this environment");
       }
 
-      // Request device if not already selected
+      // Device should already be selected from scanForDevices
       if (!this.device) {
-        // Simple approach: Just scan for any device
-        this.device = await navigator.bluetooth!.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: [
-            this.HC05_SERVICE_UUID,
-            this.FITNESS_MACHINE_SERVICE_UUID,
-            this.GENERIC_ACCESS_SERVICE_UUID,
-            this.BATTERY_SERVICE_UUID,
-            "device_information",
-            "generic_access",
-            "battery_service",
-            "heart_rate",
-          ],
-        });
+        console.error("BluetoothService: No device selected. Must scan first.");
+        throw new Error("No device selected. Please scan for devices first.");
       }
+
+      console.log("BluetoothService: Connecting to device:", this.device.name);
 
       // Connect to GATT server
       this.server = await this.device.gatt!.connect();
@@ -387,7 +428,7 @@ export class StrideBluetoothService implements IBluetoothService {
     this.isSimulating = true;
     let stepCount = 0;
 
-    console.log("Starting mobile device simulation...");
+    console.log("BluetoothService: Starting mobile device simulation...");
 
     this.simulationInterval = setInterval(() => {
       // Simulate realistic step data
@@ -407,8 +448,15 @@ export class StrideBluetoothService implements IBluetoothService {
         timestamp: Date.now(),
       };
 
+      console.log("BluetoothService: Simulated data:", simulatedData);
+
       if (this.dataCallback) {
+        console.log(
+          "BluetoothService: Calling data callback with simulated data"
+        );
         this.dataCallback(simulatedData);
+      } else {
+        console.log("BluetoothService: No data callback set!");
       }
     }, 2000); // Update every 2 seconds
   }
