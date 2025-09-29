@@ -73,8 +73,24 @@ export default function Dashboard() {
     return total / powerHistory.length;
   }, [powerHistory]);
 
-  // Setup Bluetooth service callbacks
+  // Setup Bluetooth service callbacks and try to recover connection on page load
   useEffect(() => {
+    // Try to recover existing connection first (for page refresh)
+    const attemptRecovery = async () => {
+      try {
+        const recovered = await (
+          bluetoothService as any
+        ).tryRecoverConnection?.();
+        if (recovered) {
+          console.log("🔄 Dashboard: Connection recovered after page refresh");
+        }
+      } catch (error) {
+        console.log("Dashboard: No connection to recover");
+      }
+    };
+
+    attemptRecovery();
+
     bluetoothService.setStatusCallback((newStatus) => {
       console.log("Dashboard: Status callback received:", newStatus);
       setStatus(newStatus);
@@ -105,11 +121,15 @@ export default function Dashboard() {
       } else if (newStatus === "disconnected") {
         setConnectedDevice(null);
         setSessionStartTime(null);
-        // Reset session data when disconnected
-        setSteps(0);
-        setCurrentPower(0);
-        setPowerHistory([]);
-        setBuzzerOn(false);
+        // Don't reset data immediately - might be a temporary disconnection
+        setTimeout(() => {
+          if (status === "disconnected") {
+            setSteps(0);
+            setCurrentPower(0);
+            setPowerHistory([]);
+            setBuzzerOn(false);
+          }
+        }, 2000);
       } else if (newStatus === "error") {
         toast({
           title: "❌ Connection Failed",
@@ -122,6 +142,9 @@ export default function Dashboard() {
 
     bluetoothService.setDataCallback((data: StrideData) => {
       console.log("Dashboard: Received data from bluetooth service:", data);
+      console.log(
+        `🔊 Dashboard: Updating buzzer state from ${isBuzzerOn} to ${data.buzzerActive}`
+      );
 
       // Update real-time data from the device
       setSteps(data.steps);
@@ -215,10 +238,19 @@ export default function Dashboard() {
 
   // Send buzzer command to the real device
   const handleBuzzerToggle = async (enabled: boolean) => {
+    console.log(
+      `🔊 Dashboard: handleBuzzerToggle called with enabled=${enabled}`
+    );
+    console.log(
+      `🔊 Dashboard: Current states - isBuzzerEnabled=${isBuzzerEnabled}, isBuzzerOn=${isBuzzerOn}`
+    );
     setBuzzerEnabled(enabled);
 
     if (status === "connected") {
       try {
+        console.log(
+          `🔊 Dashboard: Device connected, calling bluetoothService.setBuzzer(${enabled})`
+        );
         await bluetoothService.setBuzzer(enabled);
         toast({
           title: enabled ? "Buzzer Enabled" : "Buzzer Disabled",
@@ -235,6 +267,65 @@ export default function Dashboard() {
           variant: "destructive",
         });
       }
+    }
+  };
+
+  // Comprehensive buzzer diagnostic function
+  const handleBuzzerDiagnostic = async () => {
+    if (status === "connected") {
+      try {
+        console.log("🧪 Dashboard: Running comprehensive buzzer diagnostic...");
+
+        // Check if we're in simulation mode
+        const isSimulating = (bluetoothService as any).isSimulating;
+        console.log(`🔍 Dashboard: Simulation mode: ${isSimulating}`);
+
+        if (isSimulating) {
+          toast({
+            title: "⚠️ Simulation Mode Detected",
+            description:
+              "You're connected to test mode, not real Arduino. Reconnect to 'HI TECH' device.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Run sequence of test commands with proper delays
+        console.log("🧪 Dashboard: Sending TEST command...");
+        await bluetoothService.sendCommand("TEST");
+
+        // Wait for TEST command to complete
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        console.log("🧪 Dashboard: Sending BUZZER_ON command...");
+        await bluetoothService.setBuzzer(true);
+
+        // Wait for BUZZER_ON command to complete
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+
+        console.log("🧪 Dashboard: Sending BUZZER_OFF command...");
+        await bluetoothService.setBuzzer(false);
+
+        toast({
+          title: "🧪 Diagnostic Complete",
+          description:
+            "Test commands sent. Check Arduino Serial Monitor and console logs.",
+        });
+      } catch (error) {
+        console.error("❌ Dashboard: Diagnostic failed:", error);
+        toast({
+          title: "Diagnostic Failed",
+          description:
+            error instanceof Error ? error.message : "Command failed",
+          variant: "destructive",
+        });
+      }
+    } else {
+      toast({
+        title: "Not Connected",
+        description: "Please connect to a device first",
+        variant: "destructive",
+      });
     }
   };
 
@@ -271,15 +362,25 @@ export default function Dashboard() {
 
   const ConnectionButton = () =>
     status === "connected" ? (
-      <Button
-        onClick={handleDisconnect}
-        variant="outline"
-        size="sm"
-        className="w-full sm:w-auto"
-      >
-        <BluetoothOff className="mr-2 h-4 w-4" />
-        Disconnect
-      </Button>
+      <div className="flex gap-2 flex-col sm:flex-row">
+        <Button
+          onClick={handleBuzzerDiagnostic}
+          variant="secondary"
+          size="sm"
+          className="w-full sm:w-auto"
+        >
+          🧪 Test Buzzer
+        </Button>
+        <Button
+          onClick={handleDisconnect}
+          variant="outline"
+          size="sm"
+          className="w-full sm:w-auto"
+        >
+          <BluetoothOff className="mr-2 h-4 w-4" />
+          Disconnect
+        </Button>
+      </div>
     ) : (
       <DeviceScanner
         onDeviceSelected={handleDeviceSelected}
