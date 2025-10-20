@@ -50,6 +50,15 @@ export class StrideBluetoothService implements IBluetoothService {
   private commandQueue: Array<() => Promise<void>> = [];
   private isProcessingCommand: boolean = false;
 
+  // Connection monitoring
+  private reconnectAttempts: number = 0;
+  private maxReconnectAttempts: number = 5;
+  private reconnectDelay: number = 2000;
+  private isReconnecting: boolean = false;
+  private keepAliveInterval: NodeJS.Timeout | null = null;
+  private lastDataReceivedTime: number = 0;
+  private connectionMonitorInterval: NodeJS.Timeout | null = null;
+
   // HC-05 UUIDs (try multiple variations)
   private readonly HC05_SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb";
   private readonly HC05_DATA_CHARACTERISTIC_UUID =
@@ -355,6 +364,9 @@ export class StrideBluetoothService implements IBluetoothService {
         );
       }
 
+      // Start connection monitoring
+      this.startConnectionMonitoring();
+
       this.statusCallback?.("connected");
       console.log("✅ Device connected successfully");
     } catch (error) {
@@ -554,6 +566,9 @@ export class StrideBluetoothService implements IBluetoothService {
 
       console.log("✅ BluetoothService: Notifications started successfully!");
 
+      // Update last data received time
+      this.lastDataReceivedTime = Date.now();
+
       // Send initial status command after a delay
       setTimeout(async () => {
         try {
@@ -617,6 +632,121 @@ export class StrideBluetoothService implements IBluetoothService {
   }
 
   /**
+   * Start connection monitoring to detect and handle disconnections
+   */
+  private startConnectionMonitoring(): void {
+    console.log("🔍 BluetoothService: Starting connection monitoring...");
+
+    // Clear any existing monitoring
+    this.stopConnectionMonitoring();
+
+    // Monitor connection health every 5 seconds
+    this.connectionMonitorInterval = setInterval(() => {
+      const now = Date.now();
+      const timeSinceLastData = now - this.lastDataReceivedTime;
+
+      // If no data received for 10 seconds, connection might be dead
+      if (timeSinceLastData > 10000 && !this.isSimulating) {
+        console.warn(
+          "⚠️ BluetoothService: No data received for 10 seconds, checking connection..."
+        );
+
+        // Check if still connected
+        if (!this.isConnected()) {
+          console.error(
+            "❌ BluetoothService: Connection lost, attempting reconnection..."
+          );
+          this.attemptReconnection();
+        }
+      }
+    }, 5000);
+
+    // Send keep-alive ping every 8 seconds
+    this.keepAliveInterval = setInterval(async () => {
+      if (this.isConnected() && !this.isSimulating) {
+        try {
+          console.log(
+            "💓 BluetoothService: Sending keep-alive STATUS command..."
+          );
+          await this.sendCommand("STATUS");
+        } catch (error) {
+          console.error("❌ BluetoothService: Keep-alive failed:", error);
+        }
+      }
+    }, 8000);
+  }
+
+  /**
+   * Stop connection monitoring
+   */
+  private stopConnectionMonitoring(): void {
+    if (this.connectionMonitorInterval) {
+      clearInterval(this.connectionMonitorInterval);
+      this.connectionMonitorInterval = null;
+    }
+    if (this.keepAliveInterval) {
+      clearInterval(this.keepAliveInterval);
+      this.keepAliveInterval = null;
+    }
+  }
+
+  /**
+   * Attempt to reconnect to the device
+   */
+  private async attemptReconnection(): Promise<void> {
+    if (
+      this.isReconnecting ||
+      this.reconnectAttempts >= this.maxReconnectAttempts
+    ) {
+      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+        console.error("❌ BluetoothService: Max reconnection attempts reached");
+        this.statusCallback?.("error");
+      }
+      return;
+    }
+
+    this.isReconnecting = true;
+    this.reconnectAttempts++;
+
+    console.log(
+      `🔄 BluetoothService: Reconnection attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}...`
+    );
+
+    try {
+      // Wait before reconnecting
+      await new Promise((resolve) => setTimeout(resolve, this.reconnectDelay));
+
+      // Try to reconnect
+      if (this.device && this.device.gatt) {
+        this.statusCallback?.("connecting");
+        this.server = await this.device.gatt.connect();
+        await this.setupDeviceServices();
+
+        // Reset reconnection state on success
+        this.reconnectAttempts = 0;
+        this.isReconnecting = false;
+        this.lastDataReceivedTime = Date.now();
+
+        this.statusCallback?.("connected");
+        console.log("✅ BluetoothService: Reconnection successful!");
+      }
+    } catch (error) {
+      console.error(
+        `❌ BluetoothService: Reconnection attempt ${this.reconnectAttempts} failed:`,
+        error
+      );
+      this.isReconnecting = false;
+
+      // Try again if we haven't reached max attempts
+      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        setTimeout(() => this.attemptReconnection(), this.reconnectDelay);
+      } else {
+        this.statusCallback?.("error");
+      }
+    }
+  }
+
+  /**
    * Stop mobile simulation
    */
   private stopMobileSimulation(): void {
@@ -633,8 +763,13 @@ export class StrideBluetoothService implements IBluetoothService {
    */
   async disconnect(): Promise<void> {
     try {
-      // Stop mobile simulation if running
+      // Stop monitoring and simulation
+      this.stopConnectionMonitoring();
       this.stopMobileSimulation();
+
+      // Reset reconnection state
+      this.reconnectAttempts = 0;
+      this.isReconnecting = false;
 
       if (this.dataCharacteristic) {
         await this.dataCharacteristic.stopNotifications();
@@ -776,6 +911,9 @@ export class StrideBluetoothService implements IBluetoothService {
       const dataString = decoder.decode(value).trim();
 
       console.log("📥 BluetoothService: Raw data received:", `"${dataString}"`);
+
+      // Update last data received time for connection monitoring
+      this.lastDataReceivedTime = Date.now();
 
       // Skip empty messages
       if (!dataString) {
@@ -942,19 +1080,27 @@ export class StrideBluetoothService implements IBluetoothService {
    * Handle device disconnection
    */
   private handleDisconnection(): void {
-    console.log("Device disconnected");
+    console.log("⚠️ BluetoothService: Device disconnected event triggered");
+    this.stopConnectionMonitoring();
     this.stopMobileSimulation();
-    this.cleanup();
-    this.statusCallback?.("disconnected");
+
+    // Don't immediately notify disconnection, try to reconnect first
+    if (!this.isReconnecting) {
+      console.log("🔄 BluetoothService: Attempting automatic reconnection...");
+      this.attemptReconnection();
+    }
   }
 
   /**
    * Clean up resources
    */
   private cleanup(): void {
+    this.stopConnectionMonitoring();
     this.stopMobileSimulation();
     this.commandQueue = []; // Clear command queue
     this.isProcessingCommand = false;
+    this.reconnectAttempts = 0;
+    this.isReconnecting = false;
     this.device = null;
     this.server = null;
     this.service = null;

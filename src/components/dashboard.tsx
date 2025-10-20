@@ -36,6 +36,14 @@ import {
 import PowerChart from "./power-chart";
 import StatCard from "./stat-card";
 import DeviceScanner from "./device-scanner";
+import GoogleSignIn from "./google-signin";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   bluetoothService,
@@ -43,14 +51,13 @@ import {
   type BluetoothDeviceInfo,
   type ConnectionStatus,
 } from "@/lib/bluetooth-service";
+import {
+  googleFitService,
+  type GoogleFitAuth,
+  type GoogleFitHistoryData,
+} from "@/lib/google-fit-service";
 
 export type { ConnectionStatus } from "@/lib/bluetooth-service";
-
-const activityLog = [
-  { date: "Yesterday", steps: 10234, power: "1.2 kWh" },
-  { date: "2 days ago", steps: 8765, power: "0.9 kWh" },
-  { date: "3 days ago", steps: 12098, power: "1.5 kWh" },
-];
 
 export default function Dashboard() {
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
@@ -59,12 +66,26 @@ export default function Dashboard() {
   const [powerHistory, setPowerHistory] = useState<
     { time: string; power: number }[]
   >([]);
-  const [isBuzzerOn, setBuzzerOn] = useState(false);
-  const [isBuzzerEnabled, setBuzzerEnabled] = useState(true);
+  const [isBuzzerEnabled, setBuzzerEnabled] = useState(false); // User's toggle setting
+  const [isBuzzerActive, setBuzzerActive] = useState(false); // Currently beeping (from device)
   const [connectedDevice, setConnectedDevice] =
     useState<BluetoothDeviceInfo | null>(null);
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
   const [sessionDuration, setSessionDuration] = useState<string>("00:00:00");
+  const [googleFitAuth, setGoogleFitAuth] = useState<GoogleFitAuth>({
+    isAuthenticated: false,
+    user: null,
+  });
+  const [useGoogleFit, setUseGoogleFit] = useState(false);
+  const [googleFitSteps, setGoogleFitSteps] = useState(0);
+  const [showGoogleSignIn, setShowGoogleSignIn] = useState(false);
+  const [activityLog, setActivityLog] = useState<
+    Array<{ date: string; steps: number; power: string }>
+  >([
+    { date: "Yesterday", steps: 0, power: "0.0 kWh" },
+    { date: "2 days ago", steps: 0, power: "0.0 kWh" },
+    { date: "3 days ago", steps: 0, power: "0.0 kWh" },
+  ]);
   const { toast } = useToast();
 
   const averagePower = useMemo(() => {
@@ -127,7 +148,8 @@ export default function Dashboard() {
             setSteps(0);
             setCurrentPower(0);
             setPowerHistory([]);
-            setBuzzerOn(false);
+            setBuzzerEnabled(false);
+            setBuzzerActive(false);
           }
         }, 2000);
       } else if (newStatus === "error") {
@@ -142,14 +164,16 @@ export default function Dashboard() {
 
     bluetoothService.setDataCallback((data: StrideData) => {
       console.log("Dashboard: Received data from bluetooth service:", data);
-      console.log(
-        `🔊 Dashboard: Updating buzzer state from ${isBuzzerOn} to ${data.buzzerActive}`
-      );
 
       // Update real-time data from the device
-      setSteps(data.steps);
+      // Use Google Fit steps if enabled, otherwise use device steps
+      if (!useGoogleFit) {
+        setSteps(data.steps);
+      }
       setCurrentPower(data.power);
-      setBuzzerOn(data.buzzerActive);
+
+      // Update ONLY the active state (currently beeping), NOT the enabled setting
+      setBuzzerActive(data.buzzerActive);
 
       // Add to power history
       const now = new Date();
@@ -167,18 +191,90 @@ export default function Dashboard() {
 
       console.log(
         "Dashboard: Updated state - steps:",
-        data.steps,
+        useGoogleFit ? googleFitSteps : data.steps,
         "power:",
         data.power
       );
     });
 
+    // Don't cleanup on unmount - keep connection alive for navigation
+    // Only cleanup when window closes or user explicitly disconnects
+  }, [useGoogleFit, googleFitSteps]);
+
+  // Google Fit step monitoring
+  useEffect(() => {
+    let cleanup: (() => void) | null = null;
+
+    if (useGoogleFit && googleFitAuth.isAuthenticated) {
+      // Start monitoring Google Fit steps
+      cleanup = googleFitService.startStepMonitoring((steps) => {
+        console.log("Dashboard: Google Fit steps updated:", steps);
+        setGoogleFitSteps(steps);
+        setSteps(steps);
+      });
+    }
+
     return () => {
-      // Cleanup on unmount
-      bluetoothService.setStatusCallback(() => {});
-      bluetoothService.setDataCallback(() => {});
+      if (cleanup) cleanup();
     };
-  }, []);
+  }, [useGoogleFit, googleFitAuth.isAuthenticated]);
+
+  // Fetch activity log from Google Fit
+  useEffect(() => {
+    const fetchActivityLog = async () => {
+      if (googleFitAuth.isAuthenticated) {
+        try {
+          const historyData = await googleFitService.getHistoryData(3); // Get last 3 days
+
+          // Helper function to format relative date
+          const getRelativeDate = (daysAgo: number) => {
+            if (daysAgo === 1) return "Yesterday";
+            return `${daysAgo} days ago`;
+          };
+
+          // Convert history data to activity log format
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          const formattedLog = historyData
+            .map((data) => {
+              const dataDate = new Date(data.date);
+              dataDate.setHours(0, 0, 0, 0);
+
+              const diffTime = today.getTime() - dataDate.getTime();
+              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+              // Calculate power from steps (approximate: 1000 steps ≈ 0.1 kWh)
+              const powerKwh = (data.steps / 1000) * 0.1;
+
+              return {
+                date: getRelativeDate(diffDays),
+                steps: data.steps,
+                power: `${powerKwh.toFixed(1)} kWh`,
+                daysAgo: diffDays,
+              };
+            })
+            .filter((log) => log.daysAgo > 0 && log.daysAgo <= 3) // Only show yesterday, 2 days ago, 3 days ago
+            .sort((a, b) => a.daysAgo - b.daysAgo) // Sort by most recent first
+            .slice(0, 3); // Ensure only 3 entries
+
+          if (formattedLog.length > 0) {
+            setActivityLog(
+              formattedLog.map(({ date, steps, power }) => ({
+                date,
+                steps,
+                power,
+              }))
+            );
+          }
+        } catch (error) {
+          console.error("Failed to fetch activity log:", error);
+        }
+      }
+    };
+
+    fetchActivityLog();
+  }, [googleFitAuth.isAuthenticated]);
 
   const handleDeviceSelected = async (device: BluetoothDeviceInfo) => {
     try {
@@ -241,33 +337,93 @@ export default function Dashboard() {
     console.log(
       `🔊 Dashboard: handleBuzzerToggle called with enabled=${enabled}`
     );
-    console.log(
-      `🔊 Dashboard: Current states - isBuzzerEnabled=${isBuzzerEnabled}, isBuzzerOn=${isBuzzerOn}`
-    );
-    setBuzzerEnabled(enabled);
 
     if (status === "connected") {
       try {
-        console.log(
-          `🔊 Dashboard: Device connected, calling bluetoothService.setBuzzer(${enabled})`
-        );
+        console.log(`🔊 Dashboard: Sending buzzer command to device...`);
+
+        // Update UI immediately (optimistic update)
+        setBuzzerEnabled(enabled);
+
+        // Send command to device
         await bluetoothService.setBuzzer(enabled);
+
         toast({
-          title: enabled ? "Buzzer Enabled" : "Buzzer Disabled",
-          description: `Object detection buzzer is now ${
-            enabled ? "active" : "inactive"
-          }`,
+          title: enabled ? "🔊 Buzzer Enabled" : "🔇 Buzzer Disabled",
+          description: enabled
+            ? "Buzzer will activate when obstacle is detected (< 20cm)"
+            : "Buzzer has been disabled",
         });
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Failed to update buzzer";
+
+        // Revert UI on error
+        setBuzzerEnabled(!enabled);
+
         toast({
-          title: "Buzzer Control Failed",
+          title: "❌ Buzzer Control Failed",
           description: errorMessage,
           variant: "destructive",
         });
       }
+    } else {
+      // Not connected - just show a message
+      toast({
+        title: "⚠️ Device Not Connected",
+        description: "Please connect to your StrideSync device first",
+        variant: "destructive",
+      });
     }
+  };
+
+  // Handle Google Fit authentication
+  const handleGoogleFitAuth = () => {
+    setShowGoogleSignIn(true);
+  };
+
+  // Handle successful Google Sign-In
+  const handleGoogleSignInSuccess = (user: { email: string; name: string }) => {
+    // Get the access token from window
+    const accessToken = (window as any).__googleFitAccessToken;
+    if (accessToken) {
+      googleFitService.setAccessToken(accessToken);
+    }
+
+    setGoogleFitAuth({
+      isAuthenticated: true,
+      user,
+    });
+    setUseGoogleFit(true);
+    setShowGoogleSignIn(false);
+
+    toast({
+      title: "✅ Google Fit Connected!",
+      description: `Signed in as ${user.email}. Step tracking is now synced with Google Fit.`,
+      duration: 5000,
+    });
+  };
+
+  // Handle Google Sign-In error
+  const handleGoogleSignInError = (error: string) => {
+    toast({
+      title: "❌ Google Fit Authentication Failed",
+      description: error,
+      variant: "destructive",
+    });
+  };
+
+  // Handle Google Fit sign out
+  const handleGoogleFitSignOut = () => {
+    googleFitService.signOut();
+    setGoogleFitAuth({ isAuthenticated: false, user: null });
+    setUseGoogleFit(false);
+    setGoogleFitSteps(0);
+
+    toast({
+      title: "🔓 Signed out from Google Fit",
+      description: "Step tracking switched back to device mode",
+    });
   };
 
   // Comprehensive buzzer diagnostic function
@@ -433,6 +589,27 @@ export default function Dashboard() {
           Stride<span className="text-primary">Sync</span>
         </h1>
         <div className="flex w-full flex-col items-center gap-2 sm:w-auto sm:flex-row sm:gap-4">
+          {googleFitAuth.isAuthenticated ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGoogleFitSignOut}
+              className="w-full sm:w-auto"
+            >
+              <span className="mr-2">📊</span>
+              {googleFitAuth.user?.email || "Google Fit"}
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGoogleFitAuth}
+              className="w-full sm:w-auto"
+            >
+              <span className="mr-2">📊</span>
+              Connect Google Fit
+            </Button>
+          )}
           <Link href="/history" className="w-full sm:w-auto">
             <Button variant="ghost" size="sm" className="w-full">
               <History className="mr-2 h-4 w-4" />
@@ -451,7 +628,11 @@ export default function Dashboard() {
             title="Real-time Steps"
             value={steps.toLocaleString()}
             icon={<Footprints className="h-5 w-5 text-muted-foreground" />}
-            description="Total steps in this session"
+            description={
+              useGoogleFit && googleFitAuth.isAuthenticated
+                ? "Synced with Google Fit"
+                : "Total steps in this session"
+            }
             status={status}
           />
           <StatCard
@@ -502,6 +683,7 @@ export default function Dashboard() {
                   id="buzzer-control"
                   checked={isBuzzerEnabled}
                   onCheckedChange={handleBuzzerToggle}
+                  disabled={status !== "connected"}
                   aria-label="Toggle buzzer"
                 />
               </div>
@@ -589,7 +771,7 @@ export default function Dashboard() {
                     <span className="font-medium text-foreground">
                       Object Detection:
                     </span>
-                    {isBuzzerOn ? (
+                    {isBuzzerActive ? (
                       <div className="flex items-center gap-2 text-accent">
                         <span className="relative flex h-3 w-3">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
@@ -659,6 +841,22 @@ export default function Dashboard() {
           </Card>
         </div>
       </main>
+
+      {/* Google Sign-In Dialog */}
+      <Dialog open={showGoogleSignIn} onOpenChange={setShowGoogleSignIn}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Connect Google Fit</DialogTitle>
+            <DialogDescription>
+              Sign in with your Google account to access your fitness data
+            </DialogDescription>
+          </DialogHeader>
+          <GoogleSignIn
+            onSuccess={handleGoogleSignInSuccess}
+            onError={handleGoogleSignInError}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

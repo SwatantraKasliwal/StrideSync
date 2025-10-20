@@ -42,8 +42,7 @@ SoftwareSerial bluetooth(HC05_RX_PIN, HC05_TX_PIN);
 // System variables
 unsigned long stepCount = 0;
 float powerGenerated = 15.0;
-bool buzzerEnabled = false;    // Buzzer enabled/disabled from web app
-bool buzzerDisabled = false;   // Buzzer explicitly disabled (overrides obstacle detection)
+bool buzzerEnabled = false;    // Buzzer state controlled from web app
 bool obstacleDetected = false; // Current obstacle detection status
 
 // Timing variables
@@ -51,14 +50,16 @@ unsigned long lastDataSend = 0;
 unsigned long lastStepUpdate = 0;
 
 // Buzzer control variables
-bool buzzerPulseState = false;
+bool buzzerActive = false;      // Actual buzzer pin state
 unsigned long lastBuzzerToggle = 0;
 float previousDistance = -1;
+unsigned long lastCommandTime = 0;
 
 // Configuration
 const unsigned long DATA_SEND_INTERVAL = 2000;   // Send data every 2 seconds
 const unsigned long STEP_UPDATE_INTERVAL = 3000; // Update steps every 3 seconds
 const float OBSTACLE_DISTANCE_CM = 20.0;         // Trigger buzzer if obstacle closer than 20cm
+const unsigned long COMMAND_DEBOUNCE = 500;      // Debounce commands by 500ms
 
 void setup()
 {
@@ -74,7 +75,7 @@ void setup()
     digitalWrite(BUZZER_PIN, LOW);
     digitalWrite(TRIG_PIN, LOW);
     buzzerEnabled = false;
-    buzzerDisabled = false;
+    buzzerActive = false;
     obstacleDetected = false;
 
     // Startup sequence
@@ -150,8 +151,7 @@ void sendDataToApp()
 {
     // Send structured data that the web app expects
     // buzzerActive shows if buzzer is currently sounding (enabled AND obstacle detected)
-    // BUT respects the buzzerDisabled override
-    bool buzzerActive = !buzzerDisabled && buzzerEnabled && obstacleDetected;
+    buzzerActive = buzzerEnabled && obstacleDetected;
 
     String data = "STEPS:" + String(stepCount) +
                   ",POWER:" + String(powerGenerated, 2) +
@@ -161,12 +161,7 @@ void sendDataToApp()
     bluetooth.print(data);
     bluetooth.print("\r\n"); // Explicit line ending
 
-    // Small delay and send again for reliability
-    delay(100);
-    bluetooth.print(data);
-    bluetooth.print("\r\n");
-
-    Serial.println("📤 Data sent (2x): " + data);
+    Serial.println("📤 Data sent: " + data);
 }
 
 void handleBluetoothCommands()
@@ -176,6 +171,15 @@ void handleBluetoothCommands()
         String command = bluetooth.readString();
         command.trim();
         command.toUpperCase();
+
+        // Debounce commands to prevent rapid toggling
+        unsigned long currentTime = millis();
+        if (currentTime - lastCommandTime < COMMAND_DEBOUNCE)
+        {
+            Serial.println("⚠️  Command debounced (too fast)");
+            return;
+        }
+        lastCommandTime = currentTime;
 
         Serial.println();
         Serial.println("📨 Command received: '" + command + "'");
@@ -191,7 +195,7 @@ void handleBluetoothCommands()
             digitalWrite(BUZZER_PIN, LOW);
 
             // Send test data immediately
-            bool buzzerActive = !buzzerDisabled && buzzerEnabled && obstacleDetected;
+            buzzerActive = buzzerEnabled && obstacleDetected;
             String testData = "STEPS:" + String(stepCount) +
                               ",POWER:" + String(powerGenerated, 2) +
                               ",BUZZER:" + String(buzzerActive ? "1" : "0");
@@ -205,18 +209,36 @@ void handleBluetoothCommands()
         {
             Serial.println("🔊 BUZZER ON command");
             buzzerEnabled = true;
-            buzzerDisabled = false; // Clear disable flag
+            
+            // Send immediate confirmation with current state
+            buzzerActive = buzzerEnabled && obstacleDetected;
+            String confirmData = "STEPS:" + String(stepCount) +
+                              ",POWER:" + String(powerGenerated, 2) +
+                              ",BUZZER:" + String(buzzerActive ? "1" : "0");
+            bluetooth.print(confirmData);
+            bluetooth.print("\r\n");
+            
             bluetooth.println("BUZZER ON SUCCESS");
-            Serial.println("✅ Buzzer is now ENABLED (will buzz only when obstacle detected)");
+            Serial.println("✅ Buzzer ENABLED (will activate when obstacle detected)");
+            Serial.println("📤 Sent confirmation: " + confirmData);
         }
         else if (command == "BUZZER_OFF" || command == "OFF")
         {
             Serial.println("🔇 BUZZER OFF command");
             buzzerEnabled = false;
-            buzzerDisabled = true; // Set disable flag to override obstacle detection
-            digitalWrite(BUZZER_PIN, LOW);
+            digitalWrite(BUZZER_PIN, LOW); // Immediately turn off buzzer
+            buzzerActive = false;
+            
+            // Send immediate confirmation with current state
+            String confirmData = "STEPS:" + String(stepCount) +
+                              ",POWER:" + String(powerGenerated, 2) +
+                              ",BUZZER:0";
+            bluetooth.print(confirmData);
+            bluetooth.print("\r\n");
+            
             bluetooth.println("BUZZER OFF SUCCESS");
-            Serial.println("✅ Buzzer is now DISABLED (no obstacle detection)");
+            Serial.println("✅ Buzzer DISABLED");
+            Serial.println("📤 Sent confirmation: " + confirmData);
         }
         else if (command == "STATUS")
         {
@@ -224,8 +246,9 @@ void handleBluetoothCommands()
             bluetooth.println("STATUS: CONNECTED");
             bluetooth.println("Steps: " + String(stepCount));
             bluetooth.println("Power: " + String(powerGenerated, 2) + "mV");
-            bluetooth.println("Buzzer: " + String(buzzerEnabled ? "ENABLED" : (buzzerDisabled ? "DISABLED (OVERRIDE)" : "AUTO")));
+            bluetooth.println("Buzzer Enabled: " + String(buzzerEnabled ? "YES" : "NO"));
             bluetooth.println("Obstacle: " + String(obstacleDetected ? "DETECTED" : "CLEAR"));
+            bluetooth.println("Buzzer Active: " + String(buzzerActive ? "YES" : "NO"));
             Serial.println("✅ Status sent");
         }
         else if (command == "RESET")
@@ -234,7 +257,7 @@ void handleBluetoothCommands()
             stepCount = 0;
             powerGenerated = 15.0;
             buzzerEnabled = false;
-            buzzerDisabled = false;
+            buzzerActive = false;
             obstacleDetected = false;
             digitalWrite(BUZZER_PIN, LOW);
             bluetooth.println("RESET SUCCESS");
@@ -266,51 +289,50 @@ void checkObstacleAndControlBuzzer()
     delayMicroseconds(10);
     digitalWrite(TRIG_PIN, LOW);
 
-    long duration = pulseIn(ECHO_PIN, HIGH);
+    long duration = pulseIn(ECHO_PIN, HIGH, 30000); // 30ms timeout
     float distance = (duration * 0.034) / 2; // Convert to cm
+
+    // Check for valid reading (sensor returns 0 if no echo)
+    if (duration == 0) {
+        distance = 999; // No obstacle detected
+    }
 
     // Check for obstacle (distance less than 20cm)
     bool previousObstacleState = obstacleDetected;
     obstacleDetected = (distance > 0 && distance < OBSTACLE_DISTANCE_CM);
 
-    // Debug output for distance monitoring (only when values change)
-    if (abs(distance - previousDistance) > 1.0 || obstacleDetected != previousObstacleState)
+    // Debug output for distance monitoring (only when values change significantly)
+    if (abs(distance - previousDistance) > 2.0 || obstacleDetected != previousObstacleState)
     {
-        Serial.print("Distance: ");
+        Serial.print("📏 Distance: ");
         Serial.print(distance);
-        Serial.print(" cm, Obstacle: ");
-        Serial.println(obstacleDetected ? "YES" : "NO");
+        Serial.print(" cm | Obstacle: ");
+        Serial.println(obstacleDetected ? "YES ⚠️" : "NO ✓");
         previousDistance = distance;
     }
 
-    // Check if buzzer is explicitly disabled (overrides everything)
-    if (buzzerDisabled)
-    {
-        // Buzzer is explicitly turned OFF - no sound regardless of obstacles
-        digitalWrite(BUZZER_PIN, LOW);
-        buzzerPulseState = false;
-        return; // Exit early, don't process any other buzzer logic
-    }
-
-    // NEW LOGIC: Buzzer only works when BOTH enabled from app AND obstacle detected
+    // Simple buzzer logic: ON when both enabled AND obstacle detected
     bool shouldBuzz = buzzerEnabled && obstacleDetected;
 
     if (shouldBuzz)
     {
-        // Pulsed buzzer when app enabled AND obstacle detected (500ms on/off)
+        // Pulsed buzzer pattern (300ms on, 300ms off)
         unsigned long currentTime = millis();
-        if (currentTime - lastBuzzerToggle >= 500)
+        if (currentTime - lastBuzzerToggle >= 300)
         {
-            buzzerPulseState = !buzzerPulseState;
-            digitalWrite(BUZZER_PIN, buzzerPulseState ? HIGH : LOW);
+            buzzerActive = !buzzerActive;
+            digitalWrite(BUZZER_PIN, buzzerActive ? HIGH : LOW);
             lastBuzzerToggle = currentTime;
         }
     }
     else
     {
-        // Turn off buzzer (either app disabled OR no obstacle)
-        digitalWrite(BUZZER_PIN, LOW);
-        buzzerPulseState = false;
+        // Turn off buzzer immediately
+        if (buzzerActive) {
+            digitalWrite(BUZZER_PIN, LOW);
+            buzzerActive = false;
+            Serial.println("🔇 Buzzer turned OFF");
+        }
     }
 }
 
