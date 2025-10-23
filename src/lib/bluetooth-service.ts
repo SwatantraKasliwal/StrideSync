@@ -797,9 +797,21 @@ export class StrideBluetoothService implements IBluetoothService {
    * Add command to queue to prevent GATT operation conflicts
    */
   private async queueCommand(commandFn: () => Promise<void>): Promise<void> {
+    // Check if device is connected before queueing command
+    if (!this.server || !this.server.connected) {
+      console.warn(
+        "⚠️ BluetoothService: Device not connected, cannot send command"
+      );
+      throw new Error("Device not connected. Cannot send command.");
+    }
+
     return new Promise((resolve, reject) => {
       this.commandQueue.push(async () => {
         try {
+          // Double-check connection before executing command
+          if (!this.server || !this.server.connected) {
+            throw new Error("Device disconnected while processing command");
+          }
           await commandFn();
           resolve();
         } catch (error) {
@@ -826,7 +838,8 @@ export class StrideBluetoothService implements IBluetoothService {
         try {
           await commandFn();
           // Add delay between commands to prevent GATT conflicts
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          // Increased from 100ms to 300ms for better HC-05 compatibility
+          await new Promise((resolve) => setTimeout(resolve, 300));
         } catch (error) {
           console.error("Command queue error:", error);
         }
@@ -860,6 +873,16 @@ export class StrideBluetoothService implements IBluetoothService {
       return;
     }
 
+    // Validate connection before sending command
+    if (!this.server || !this.server.connected) {
+      const errorMsg =
+        "Device not connected. Please reconnect before sending commands.";
+      console.warn(
+        `⚠️ BluetoothService: Cannot send command - device not connected (this may be normal during connection setup)`
+      );
+      throw new Error(errorMsg);
+    }
+
     // For real devices, use command queue to prevent GATT conflicts
     return this.queueCommand(async () => {
       if (!this.commandCharacteristic) {
@@ -868,15 +891,56 @@ export class StrideBluetoothService implements IBluetoothService {
         );
       }
 
+      // Final check before writing
+      if (!this.server || !this.server.connected) {
+        throw new Error("Device disconnected before command could be sent");
+      }
+
       const encoder = new TextEncoder();
       const data = encoder.encode(command);
 
-      console.log(
-        `🔊 BluetoothService: Writing "${command}" to characteristic...`
-      );
-      await this.commandCharacteristic.writeValue(data);
-      console.log(
-        `✅ BluetoothService: Command "${command}" written successfully to HC-05`
+      // Retry logic for GATT operation conflicts
+      const maxRetries = 3;
+      let lastError: Error | null = null;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(
+            `🔊 BluetoothService: Writing "${command}" to characteristic (attempt ${attempt}/${maxRetries})...`
+          );
+          await this.commandCharacteristic.writeValue(data);
+          console.log(
+            `✅ BluetoothService: Command "${command}" written successfully to HC-05`
+          );
+          return; // Success - exit retry loop
+        } catch (error: any) {
+          lastError = error;
+
+          // Check if it's a GATT operation conflict
+          if (
+            error.message?.includes("GATT operation") ||
+            error.message?.includes("already in progress")
+          ) {
+            console.warn(
+              `⚠️ BluetoothService: GATT busy, waiting before retry ${attempt}/${maxRetries}...`
+            );
+
+            // Wait before retrying (exponential backoff)
+            const waitTime = attempt * 200; // 200ms, 400ms, 600ms
+            await new Promise((resolve) => setTimeout(resolve, waitTime));
+
+            // Don't throw yet, try again
+            if (attempt < maxRetries) continue;
+          }
+
+          // For other errors or max retries reached, throw immediately
+          throw error;
+        }
+      }
+
+      // If we get here, all retries failed
+      throw new Error(
+        `Failed to send command "${command}" after ${maxRetries} retries: ${lastError?.message}`
       );
     });
   }

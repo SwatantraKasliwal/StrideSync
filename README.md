@@ -1,194 +1,144 @@
-# StrideSync - Smart Shoe Energy Harvesting System# StrideSync Smart Shoe
+# StrideSync - Smart Shoe Energy Harvesting System
 
-A Next.js web application that connects to Arduino-based smart shoes via Bluetooth (HC-05) to track steps, monitor power generation, and provide obstacle detection with a buzzer alert system. Integrates with Google Fit API for real-time step synchronization.A real-time smart shoe monitoring system that connects Arduino-based sensors with a web application via HC-05 Bluetooth module.
+A Next.js web application that connects to Arduino-based smart shoes via Bluetooth (HC-05) to track steps, monitor power generation, and provide obstacle detection with a buzzer alert system. Integrates with Google Fit API for real-time step synchronization.
 
----## Features
+[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://stride-sync-virid.vercel.app/)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?style=for-the-badge&logo=github)](https://github.com/SwatantraKasliwal/StrideSync)
 
-## 🚀 Features✅ **Real-time Data Monitoring**
+## 🌐 Live Demo
 
-- Step counting
+**🚀 Try it now:** [https://stride-sync-virid.vercel.app/](https://stride-sync-virid.vercel.app/)
 
-- **Real-time Bluetooth Connection**: Connect to HC-05 Bluetooth module via Web Bluetooth API- Power generation tracking
+**📦 GitHub Repository:** [https://github.com/SwatantraKasliwal/StrideSync](https://github.com/SwatantraKasliwal/StrideSync)
 
-- **Live Data Monitoring**: Track steps, power generation, and session duration- Live data visualization
+---
 
-- **Google Fit Integration**: Sync real-time steps from your Google Fit account- Session history
+## 🚀 Features
 
-- **Obstacle Detection**: Buzzer alert system with ultrasonic sensor (< 20cm detection)
+✅ **Real-time Data Monitoring**
 
-- **Interactive Dashboard**: Beautiful UI with charts, statistics, and device controls✅ **Bluetooth HC-05 Integration**
+- Step counting with live updates
+- Power generation tracking
+- Live data visualization with charts
+- Session history and analytics
 
-- **Test Mode**: Built-in simulation mode for testing without hardware- Seamless connection to HI TECH HC-05 modules
+✅ **Bluetooth HC-05 Integration**
 
-- **Auto-reconnect**: Automatic reconnection on temporary disconnections- Real-time command/response communication
+- Seamless connection to HC-05 Bluetooth modules
+- Real-time command/response communication
+- Auto-reconnect on temporary disconnections
+- Multiple service UUID support
 
-- **Session History**: Track your activity over time- Multiple service UUID support
+✅ **Google Fit Integration**
 
----✅ **Smart Buzzer Control**
+- Sync real-time steps from your Google Fit account
+- Historical data fetching (last 3 days)
+- OAuth 2.0 authentication
+- Token persistence across sessions
+
+✅ **Smart Buzzer Control**
 
 - Remote buzzer activation/deactivation
-
-## 📋 Prerequisites- Real-time status feedback
-
+- Obstacle detection (< 20cm)
+- Real-time status feedback
 - Test mode functionality
 
+✅ **Modern Web Dashboard**
+
+- Responsive design with Tailwind CSS
+- Interactive charts and statistics
+- Device connection management
+- Beautiful UI with shadcn/ui components
+
+---
+
+## 📋 Prerequisites
+
 - **Node.js** (v18 or higher)
+- **npm**, **yarn**, or **pnpm**
+- **Arduino Uno** with HC-05 Bluetooth module
+- **Modern browser** with Web Bluetooth API support (Chrome, Edge, Opera)
+- **Google Cloud Console account** (for Google Fit integration)
 
-- **npm** or **yarn**✅ **Modern Web Dashboard**
+---
 
-- **Arduino Uno** with HC-05 Bluetooth module- Responsive design with Tailwind CSS
+## 🔧 Hardware Setup
 
-- **Modern browser** with Web Bluetooth API support (Chrome, Edge, Opera)- Interactive charts and statistics
+### Required Components
 
-- **Google Cloud Console account** (for Google Fit integration)- Device connection management
+1. **Arduino Uno** (or compatible)
+2. **HC-05 Bluetooth Module** (appears as "HI TECH")
+3. **Ultrasonic Sensor (HC-SR04)** (optional for obstacle detection)
+4. **Buzzer** (Active or Passive)
+5. **Jumper Wires** and breadboard
+6. **Power Supply** (USB or Battery)
 
----## Hardware Requirements
+### Wiring Diagram
 
-## 🔧 Hardware Setup### Arduino Setup
-
-- **Arduino Uno** (or compatible)
-
-### Required Components:- **HC-05 Bluetooth Module** (appears as "HI TECH")
-
-- **Buzzer** for alerts
-
-1. **Arduino Uno**- **Jumper wires** and breadboard
-
-2. **HC-05 Bluetooth Module**
-
-3. **Ultrasonic Sensor (HC-SR04)**### Wiring Diagram
-
-4. **Buzzer** (Active or Passive)```
-
-5. **Jumper Wires**HC-05 Module:
-
-6. **Power Supply** (USB or Battery) VCC -> Arduino 5V
-
-GND -> Arduino GND
-
-### Wiring Diagram: TXD -> Arduino Pin 2 (RX)
-
-RXD -> Arduino Pin 3 (TX)
-
-````
-
-HC-05 Bluetooth Module:Buzzer:
-
-├─ VCC → Arduino 5V  + -> Arduino Pin 4
-
-├─ GND → Arduino GND  - -> Arduino GND
-
-├─ TXD → Arduino Pin 2 (RX)```
-
-└─ RXD → Arduino Pin 3 (TX)
-
-## Arduino Code Setup
-
-Ultrasonic Sensor (HC-SR04):
-
-├─ VCC → Arduino 5V1. **IMPORTANT**: Disconnect HC-05 TX/RX wires (pins 2&3) before uploading
-
-├─ GND → Arduino GND2. Upload `StrideSync_HC05_Final.ino` to your Arduino
-
-├─ Trig → Arduino Pin 93. Reconnect HC-05 TX/RX wires
-
-└─ Echo → Arduino Pin 84. Open Serial Monitor (9600 baud) to verify operation
-
-5. Look for "✅ System ready" message
+```
+HC-05 Module:
+  VCC -> Arduino 5V
+  GND -> Arduino GND
+  TXD -> Arduino Pin 2 (RX)
+  RXD -> Arduino Pin 3 (TX)
 
 Buzzer:
+  + -> Arduino Pin 4
+  - -> Arduino GND
 
-├─ Positive (+) → Arduino Pin 12### Arduino Commands
+Ultrasonic Sensor (Optional):
+  VCC -> Arduino 5V
+  GND -> Arduino GND
+  Trig -> Arduino Pin 9
+  Echo -> Arduino Pin 8
+```
 
-└─ Negative (-) → Arduino GND- `TEST` - Buzzer beep test
+### Arduino Code Setup
 
-```- `BUZZER_ON` / `ON` - Turn buzzer on
+1. **IMPORTANT**: Disconnect HC-05 TX/RX wires (pins 2 & 3) before uploading
+2. Upload `StrideSync_HC05_Final.ino` to your Arduino
+3. Reconnect HC-05 TX/RX wires
+4. Open Serial Monitor (9600 baud) to verify operation
+5. Look for "✅ System ready" message
 
+### Arduino Commands
+
+- `TEST` - Buzzer beep test
+- `BUZZER_ON` / `ON` - Turn buzzer on
 - `BUZZER_OFF` / `OFF` - Turn buzzer off
-
-### Arduino Code Upload:- `STATUS` - Get device status
-
+- `STATUS` - Get device status
 - `RESET` - Reset step counter
 
-1. **IMPORTANT**: Disconnect HC-05 TX/RX wires from pins 2 & 3 before uploading
+---
 
-2. Open `StrideSync_HC05_Final.ino` in Arduino IDE## Web Application Setup
+## 💻 Web Application Setup
 
-3. Select Board: **Arduino Uno**
+### Installation
 
-4. Select correct **COM Port**### Prerequisites
-
-5. Click **Upload**- Node.js 18+
-
-6. Wait for "Done uploading"- npm/yarn/pnpm
-
-7. **Reconnect** HC-05 TX/RX wires to pins 2 & 3
-
-8. Open **Serial Monitor** (9600 baud) to verify operation### Installation
-
-
-
-### Expected Serial Monitor Output:```bash
-
+```bash
 # Clone the repository
+git clone https://github.com/SwatantraKasliwal/StrideSync.git
+cd StrideSync
 
-```git clone <repository-url>
+# Install dependencies
+npm install
 
-🚀 StrideSync Smart Shoe - FINAL VERSIONcd StrideSync
-
-📡 HC-05 Bluetooth Module
-
-🔧 Hardware:# Install dependencies
-
-   - Buzzer on Pin 12npm install
-
-   - HC-05 on Pins 2&3
-
-   - Ultrasonic Trig Pin 9, Echo Pin 8# Start development server
-
+# Start development server
 npm run dev
+```
 
-🔊 Testing buzzer...```
+### Environment Variables
 
-✅ Buzzer test complete
+Create a `.env.local` file in the root directory:
 
-📱 Bluetooth initialized### Environment Setup
+```env
+# Google Fit API Configuration
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_client_id_here.apps.googleusercontent.com
+```
 
-✅ System ready - waiting for commands
+**Get your Client ID from**: [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 
-=====================================1. Open [http://localhost:3000](http://localhost:3000)
-
-```2. Enable Bluetooth in your browser
-
-3. Click "Scan for Devices"
-
----4. Select your "HI TECH" device
-
-5. Click "Connect"
-
-## 🌐 Google Fit API Setup
-
-## Usage Guide
-
-### Step 1: Create Google Cloud Project
-
-### Connecting to HC-05
-
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-
-2. Click **"Create Project"** or select existing project1. **Power on** your Arduino with HC-05 module
-
-3. Enter project name: **"StrideSync"** (or any name)2. **Verify** HC-05 LED is blinking (ready to pair)
-
-4. Click **"Create"**3. **Open** StrideSync web app
-
-4. **Click** "Scan for Devices" button
-
-### Step 2: Enable Fitness API5. **Select** "HI TECH" from device list
-
-6. **Wait** for connection (LED should become solid)
-
-1. In Google Cloud Console, go to **"APIs & Services"** → **"Library"**7. **Verify** data starts appearing on dashboard
+---
 
 2. Search for **"Fitness API"**
 
@@ -224,7 +174,7 @@ npm run dev
 
    - Search and add: `fitness.location.read`
 
-7. Click **"Save and Continue"****No Data Received:**
+7. Click **"Save and Continue"\*\***No Data Received:\*\*
 
 8. **Test Users**: Click **"Add Users"**- Check Serial Monitor for Arduino output
 
@@ -252,103 +202,84 @@ npm run dev
 
    - Add: `http://localhost:9002`- **Frontend**: Next.js 14, React, TypeScript
 
-   - Add: `http://localhost:3000`- **Styling**: Tailwind CSS, shadcn/ui components
+## 🌐 Google Fit API Setup
 
-   - Add: `https://yourdomain.com` (for production)- **Bluetooth**: Web Bluetooth API
+### Step 1: Create Google Cloud Project
 
-6. **Authorized redirect URIs**:- **Charts**: Recharts
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Click **"Create Project"** or select existing project
+3. Enter project name: **"StrideSync"**
+4. Click **"Create"**
 
-   - Add: `http://localhost:9002`- **Hardware**: Arduino, HC-05 Bluetooth
+### Step 2: Enable Fitness API
 
+1. In Google Cloud Console, go to **"APIs & Services"** → **"Library"**
+2. Search for **"Fitness API"**
+3. Click **"Fitness API"** from results
+4. Click **"Enable"**
+
+### Step 3: Create OAuth 2.0 Credentials
+
+1. Go to **"APIs & Services"** → **"Credentials"**
+2. Click **"+ CREATE CREDENTIALS"** → **"OAuth client ID"**
+3. Configure consent screen (if prompted):
+   - User Type: **External**
+   - App name: **StrideSync**
+   - User support email: Your email
+   - Developer contact: Your email
+4. Select **"Web application"**
+5. Name: **"StrideSync Web Client"**
+6. **Authorized JavaScript origins**:
    - Add: `http://localhost:3000`
+   - Add: `http://localhost:9002`
+   - Add: `https://stride-sync-virid.vercel.app` (production)
+7. **Authorized redirect URIs**:
+   - Add: `http://localhost:3000`
+   - Add: `http://localhost:9002`
+   - Add: `https://stride-sync-virid.vercel.app` (production)
+8. Click **"Create"**
+9. **Copy the Client ID** (looks like: `xxxxx.apps.googleusercontent.com`)
 
-   - Add: `https://yourdomain.com` (for production)### Project Structure
+### Step 4: Configure Environment Variables
 
-7. Click **"Create"**```
+Create a `.env.local` file in the project root:
 
-8. **Copy the Client ID** (looks like: `xxxxx.apps.googleusercontent.com`)src/
-
-├── app/          # Next.js app router
-
----├── components/   # React components
-
-│   ├── ui/       # shadcn/ui components
-
-## ⚙️ Installation & Configuration│   └── dashboard.tsx
-
-├── lib/          # Utility functions
-
-### 1. Clone the Repository│   └── bluetooth-service.ts
-
-└── types/        # TypeScript definitions
-
-```bash```
-
-git clone https://github.com/SwatantraKasliwal/StrideSync.git
-
-cd StrideSync### Building for Production
-
-````
-
-````bash
-
-### 2. Install Dependenciesnpm run build
-
-npm start
-
-```bash```
-
-npm install
-
-# or## Contributing
-
-yarn install
-
-```1. Fork the repository
-
-2. Create a feature branch
-
-### 3. Configure Environment Variables3. Commit your changes
-
-4. Push to the branch
-
-Create a `.env.local` file in the project root:5. Open a Pull Request
-
-
-
-```bash## License
-
-# .env.local
-
-This project is licensed under the MIT License.
-
+```env
 # Google Fit API Configuration
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=70059231909-3jds1hb6i37tbm40jgf77saino4vitq3.apps.googleusercontent.com
+```
 
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_client_id_here.apps.googleusercontent.com## Support
+**Note**: This is already configured with the project's Client ID. You can use this or replace with your own.
 
+---
 
+## 🚀 Getting Started
 
-# Optional: Firebase Configuration (if needed in future)For issues and questions:
-
-NEXT_PUBLIC_FIREBASE_API_KEY=1. Check the troubleshooting section
-
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=2. Review Arduino Serial Monitor output
-
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=3. Check browser console for errors
-
-```4. Open an issue on GitHub
-
-**Replace** `your_client_id_here` with the Client ID from Step 4 above.
-
-### 4. Start Development Server
+### Quick Start
 
 ```bash
-npm run dev
-# or
-yarn dev
-````
+# Clone the repository
+git clone https://github.com/SwatantraKasliwal/StrideSync.git
+cd StrideSync
 
-The application will be available at: **http://localhost:9002** (or port shown in terminal)
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+The application will be available at: **http://localhost:3000**
+
+### Building for Production
+
+```bash
+# Build the application
+npm run build
+
+# Start production server
+npm start
+```
 
 ---
 
@@ -682,7 +613,8 @@ npm run start
 - **APIs**: Web Bluetooth API, Google Fit REST API
 - **Authentication**: Google OAuth 2.0, Google Identity Services
 - **Charts**: Recharts library
-- **Hardware**: Arduino Uno, HC-05 Bluetooth, HC-SR04 Ultrasonic Sensor
+- **Hardware**: Arduino Uno, HC-05 Bluetooth Module, HC-SR04 Ultrasonic Sensor
+- **Deployment**: Vercel
 
 ---
 
@@ -727,7 +659,13 @@ googleFitService.signOut();
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
 ---
 
@@ -741,8 +679,9 @@ This project is open source and available under the MIT License.
 
 **Swatantra Kasliwal**
 
-- GitHub: [@SwatantraKasliwal](https://github.com/SwatantraKasliwal)
-- Repository: [StrideSync](https://github.com/SwatantraKasliwal/StrideSync)
+- 🌐 Live Demo: [stride-sync-virid.vercel.app](https://stride-sync-virid.vercel.app/)
+- 💻 GitHub: [@SwatantraKasliwal](https://github.com/SwatantraKasliwal)
+- 📦 Repository: [StrideSync](https://github.com/SwatantraKasliwal/StrideSync)
 
 ---
 
@@ -750,39 +689,63 @@ This project is open source and available under the MIT License.
 
 - Next.js team for the amazing framework
 - shadcn for beautiful UI components
-- Arduino community for HC-05 libraries
+- Arduino community for HC-05 libraries and examples
 - Google Fit API for fitness data integration
+- Vercel for seamless deployment
 
 ---
 
-## 📞 Support
+## 📞 Support & Issues
 
 If you encounter any issues:
 
-1. Check the **Troubleshooting** section above
-2. Review Arduino Serial Monitor output
-3. Check browser console for errors (F12)
-4. Ensure all wiring is correct
-5. Verify environment variables are set
-6. Create an issue on GitHub
+1. ✅ Check the **Troubleshooting** section in this README
+2. ✅ Review Arduino Serial Monitor output (9600 baud)
+3. ✅ Check browser console for errors (Press F12)
+4. ✅ Ensure all wiring connections are correct
+5. ✅ Verify `.env.local` file exists with correct Client ID
+6. ✅ Make sure you're using Chrome, Edge, or Opera browser
+7. ✅ Check that Bluetooth is enabled on your device
+8. 📝 Create an issue on [GitHub](https://github.com/SwatantraKasliwal/StrideSync/issues)
 
 ---
 
 ## 🎉 Quick Start Checklist
 
-- [ ] Arduino code uploaded (HC-05 disconnected during upload)
-- [ ] HC-05 reconnected after upload
-- [ ] Serial Monitor shows "System ready"
-- [ ] `.env.local` file created with Google Client ID
-- [ ] Development server started (`npm run dev`)
-- [ ] Browser opened at `http://localhost:9002`
-- [ ] Bluetooth enabled on computer
-- [ ] Using Chrome/Edge/Opera browser
-- [ ] Device connected successfully
-- [ ] Google Fit authenticated (optional)
-- [ ] Buzzer toggle working
-- [ ] All features tested ✅
+Before running the project, make sure:
+
+- [ ] ✅ Arduino code uploaded (HC-05 TX/RX disconnected during upload)
+- [ ] ✅ HC-05 TX/RX reconnected after upload
+- [ ] ✅ Serial Monitor shows "✅ System ready"
+- [ ] ✅ `.env.local` file created with Google Client ID
+- [ ] ✅ Dependencies installed (`npm install`)
+- [ ] ✅ Development server started (`npm run dev`)
+- [ ] ✅ Browser opened at `http://localhost:3000`
+- [ ] ✅ Bluetooth enabled on your computer
+- [ ] ✅ Using Chrome, Edge, or Opera browser
+- [ ] ✅ Google Cloud Console OAuth configured (for Google Fit)
+- [ ] ✅ Device connects successfully
+- [ ] ✅ Google Fit authenticated (optional but recommended)
+- [ ] ✅ Buzzer toggle working
+- [ ] ✅ All features tested
 
 ---
 
-**Happy Coding! 🚀**
+## 🌟 Features Roadmap
+
+- [x] Real-time Bluetooth communication
+- [x] Google Fit integration
+- [x] Obstacle detection with buzzer
+- [x] Activity history tracking
+- [x] Responsive dashboard UI
+- [x] Auto-reconnection on disconnect
+- [x] Test mode for development
+- [x] Production deployment on Vercel
+- [ ] Mobile app version (React Native)
+- [ ] Multiple shoe pairing
+- [ ] Advanced analytics dashboard
+- [ ] Export data to CSV/PDF
+
+---
+
+**Made with ❤️ for IOE Lab | Happy Coding! 🚀**

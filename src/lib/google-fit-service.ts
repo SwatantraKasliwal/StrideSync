@@ -43,11 +43,21 @@ export class GoogleFitService implements IGoogleFitService {
     "https://www.googleapis.com/auth/fitness.activity.read",
     "https://www.googleapis.com/auth/fitness.location.read",
   ];
+  private readonly STORAGE_KEY = "stride_sync_google_fit_token";
 
   constructor() {
     // You need to set up Google Cloud Console project and get OAuth 2.0 credentials
     // Replace this with your actual Client ID from Google Cloud Console
     this.clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+
+    // Try to restore token from localStorage on initialization
+    if (typeof window !== "undefined") {
+      const storedToken = localStorage.getItem(this.STORAGE_KEY);
+      if (storedToken) {
+        this.accessToken = storedToken;
+        console.log("✅ GoogleFitService: Restored token from localStorage");
+      }
+    }
   }
 
   /**
@@ -91,6 +101,14 @@ export class GoogleFitService implements IGoogleFitService {
                 }
 
                 this.accessToken = response.access_token;
+
+                // Save token to localStorage for persistence
+                if (typeof window !== "undefined") {
+                  localStorage.setItem(this.STORAGE_KEY, response.access_token);
+                  console.log(
+                    "✅ GoogleFitService: Token saved to localStorage"
+                  );
+                }
 
                 // Get user info
                 const userInfo = await this.getUserInfo();
@@ -233,6 +251,16 @@ export class GoogleFitService implements IGoogleFitService {
         }
       );
 
+      // Handle authentication errors (token expired)
+      if (response.status === 401 || response.status === 403) {
+        console.error("❌ GoogleFitService: Token expired or invalid");
+        this.accessToken = null;
+        if (typeof window !== "undefined") {
+          localStorage.removeItem(this.STORAGE_KEY);
+        }
+        throw new Error("Authentication token expired. Please sign in again.");
+      }
+
       if (!response.ok) {
         throw new Error(`Google Fit API error: ${response.statusText}`);
       }
@@ -361,6 +389,12 @@ export class GoogleFitService implements IGoogleFitService {
    */
   signOut(): void {
     this.accessToken = null;
+
+    // Clear token from localStorage
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(this.STORAGE_KEY);
+      console.log("✅ GoogleFitService: Token cleared from localStorage");
+    }
   }
 
   /**
@@ -478,10 +512,38 @@ export class GoogleFitService implements IGoogleFitService {
 
     const fetchSteps = async () => {
       try {
+        // Check if still authenticated before fetching
+        if (!this.accessToken) {
+          console.warn(
+            "⚠️ GoogleFitService: Not authenticated, skipping step fetch"
+          );
+          return;
+        }
+
         const steps = await this.getTodaySteps();
         callback(steps);
       } catch (error) {
         console.error("Error fetching steps:", error);
+
+        // If authentication error, clear token and stop monitoring
+        if (
+          error instanceof Error &&
+          error.message.includes("Not authenticated")
+        ) {
+          console.warn(
+            "⚠️ GoogleFitService: Authentication lost, stopping monitoring"
+          );
+          this.accessToken = null;
+          if (typeof window !== "undefined") {
+            localStorage.removeItem(this.STORAGE_KEY);
+          }
+
+          // Stop the interval
+          if (intervalId) {
+            clearInterval(intervalId);
+            intervalId = null;
+          }
+        }
       }
     };
 

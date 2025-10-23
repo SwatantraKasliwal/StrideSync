@@ -68,23 +68,44 @@ export default function Dashboard() {
   >([]);
   const [isBuzzerEnabled, setBuzzerEnabled] = useState(false); // User's toggle setting
   const [isBuzzerActive, setBuzzerActive] = useState(false); // Currently beeping (from device)
+  const [isTogglingBuzzer, setIsTogglingBuzzer] = useState(false); // Prevent rapid toggling
   const [connectedDevice, setConnectedDevice] =
     useState<BluetoothDeviceInfo | null>(null);
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
   const [sessionDuration, setSessionDuration] = useState<string>("00:00:00");
-  const [googleFitAuth, setGoogleFitAuth] = useState<GoogleFitAuth>({
-    isAuthenticated: false,
-    user: null,
+
+  // Initialize Google Fit auth state from localStorage
+  const [googleFitAuth, setGoogleFitAuth] = useState<GoogleFitAuth>(() => {
+    if (typeof window !== "undefined" && googleFitService.isAuthenticated()) {
+      console.log("✅ Dashboard: Initializing with stored Google Fit auth");
+      return {
+        isAuthenticated: true,
+        user: null,
+      };
+    }
+    return {
+      isAuthenticated: false,
+      user: null,
+    };
   });
-  const [useGoogleFit, setUseGoogleFit] = useState(false);
+
+  // Initialize useGoogleFit from localStorage
+  const [useGoogleFit, setUseGoogleFit] = useState(() => {
+    if (typeof window !== "undefined" && googleFitService.isAuthenticated()) {
+      console.log("✅ Dashboard: Google Fit enabled from stored auth");
+      return true;
+    }
+    return false;
+  });
+
   const [googleFitSteps, setGoogleFitSteps] = useState(0);
   const [showGoogleSignIn, setShowGoogleSignIn] = useState(false);
   const [activityLog, setActivityLog] = useState<
     Array<{ date: string; steps: number; power: string }>
   >([
+    { date: "Today", steps: 0, power: "0.0 kWh" },
     { date: "Yesterday", steps: 0, power: "0.0 kWh" },
     { date: "2 days ago", steps: 0, power: "0.0 kWh" },
-    { date: "3 days ago", steps: 0, power: "0.0 kWh" },
   ]);
   const { toast } = useToast();
 
@@ -121,6 +142,30 @@ export default function Dashboard() {
         const deviceInfo = bluetoothService.getDeviceInfo();
         setConnectedDevice(deviceInfo);
         console.log("Dashboard: Device info:", deviceInfo);
+
+        // Sync buzzer state with device after connection
+        // Reset buzzer to OFF state to prevent auto-buzzing
+        // Wait longer to ensure device is fully ready
+        setTimeout(async () => {
+          try {
+            // Only reset if device is still connected and ready
+            if (bluetoothService.isConnected()) {
+              console.log(
+                "Dashboard: Resetting buzzer state after connection..."
+              );
+              await bluetoothService.setBuzzer(false);
+              setBuzzerEnabled(false);
+              setBuzzerActive(false);
+              console.log("Dashboard: Buzzer reset to OFF successfully");
+            }
+          } catch (error) {
+            // Silently fail - device might be in simulation mode or not ready
+            console.warn(
+              "Dashboard: Could not reset buzzer state (this is normal for test devices):",
+              error
+            );
+          }
+        }, 3000); // Increased from 1500ms to 3000ms to avoid GATT conflicts
 
         // Show connection success toast
         if (deviceInfo?.name === "Test StrideSync Device") {
@@ -201,33 +246,70 @@ export default function Dashboard() {
     // Only cleanup when window closes or user explicitly disconnects
   }, [useGoogleFit, googleFitSteps]);
 
-  // Google Fit step monitoring
+  // Google Fit step monitoring with error handling
   useEffect(() => {
-    let cleanup: (() => void) | null = null;
-
     if (useGoogleFit && googleFitAuth.isAuthenticated) {
       // Start monitoring Google Fit steps
-      cleanup = googleFitService.startStepMonitoring((steps) => {
-        console.log("Dashboard: Google Fit steps updated:", steps);
-        setGoogleFitSteps(steps);
-        setSteps(steps);
-      });
+      console.log("✅ Dashboard: Starting Google Fit step monitoring");
+
+      // Check if token is still valid by doing a test fetch
+      const validateAndStartMonitoring = async () => {
+        try {
+          // Test if we can fetch data
+          const testSteps = await googleFitService.getTodaySteps();
+          console.log(
+            "✅ Dashboard: Google Fit token validated, steps:",
+            testSteps
+          );
+
+          // Token is valid, start monitoring
+          const cleanup = googleFitService.startStepMonitoring((steps) => {
+            console.log("Dashboard: Google Fit steps updated:", steps);
+            setGoogleFitSteps(steps);
+            setSteps(steps);
+          });
+
+          // Store cleanup function globally so it persists across navigation
+          if (typeof window !== "undefined") {
+            (window as any).__googleFitCleanup = cleanup;
+          }
+        } catch (error) {
+          console.error(
+            "❌ Dashboard: Google Fit authentication failed:",
+            error
+          );
+
+          // Token expired or invalid - reset state
+          setGoogleFitAuth({ isAuthenticated: false, user: null });
+          setUseGoogleFit(false);
+
+          toast({
+            title: "⚠️ Google Fit Token Expired",
+            description:
+              "Please reconnect to Google Fit to continue syncing steps",
+            variant: "destructive",
+            duration: 6000,
+          });
+        }
+      };
+
+      validateAndStartMonitoring();
     }
 
-    return () => {
-      if (cleanup) cleanup();
-    };
-  }, [useGoogleFit, googleFitAuth.isAuthenticated]);
+    // Don't cleanup on unmount - keep monitoring active for navigation
+    // Only cleanup when user explicitly disconnects
+  }, [useGoogleFit, googleFitAuth.isAuthenticated, toast]);
 
   // Fetch activity log from Google Fit
   useEffect(() => {
     const fetchActivityLog = async () => {
       if (googleFitAuth.isAuthenticated) {
         try {
-          const historyData = await googleFitService.getHistoryData(3); // Get last 3 days
+          const historyData = await googleFitService.getHistoryData(4); // Get last 4 days (to get 3 past days + today)
 
           // Helper function to format relative date
           const getRelativeDate = (daysAgo: number) => {
+            if (daysAgo === 0) return "Today";
             if (daysAgo === 1) return "Yesterday";
             return `${daysAgo} days ago`;
           };
@@ -242,7 +324,7 @@ export default function Dashboard() {
               dataDate.setHours(0, 0, 0, 0);
 
               const diffTime = today.getTime() - dataDate.getTime();
-              const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+              const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)); // Use Math.round instead of Math.ceil
 
               // Calculate power from steps (approximate: 1000 steps ≈ 0.1 kWh)
               const powerKwh = (data.steps / 1000) * 0.1;
@@ -254,7 +336,7 @@ export default function Dashboard() {
                 daysAgo: diffDays,
               };
             })
-            .filter((log) => log.daysAgo > 0 && log.daysAgo <= 3) // Only show yesterday, 2 days ago, 3 days ago
+            .filter((log) => log.daysAgo >= 0 && log.daysAgo <= 2) // Show today, yesterday, 2 days ago
             .sort((a, b) => a.daysAgo - b.daysAgo) // Sort by most recent first
             .slice(0, 3); // Ensure only 3 entries
 
@@ -334,11 +416,25 @@ export default function Dashboard() {
 
   // Send buzzer command to the real device
   const handleBuzzerToggle = async (enabled: boolean) => {
+    // Prevent rapid toggling while a command is in progress
+    if (isTogglingBuzzer) {
+      console.warn(
+        "⚠️ Dashboard: Buzzer toggle already in progress, ignoring..."
+      );
+      toast({
+        title: "⏳ Please Wait",
+        description: "Buzzer command is being processed...",
+      });
+      return;
+    }
+
     console.log(
       `🔊 Dashboard: handleBuzzerToggle called with enabled=${enabled}`
     );
 
     if (status === "connected") {
+      setIsTogglingBuzzer(true); // Mark as in progress
+
       try {
         console.log(`🔊 Dashboard: Sending buzzer command to device...`);
 
@@ -366,6 +462,11 @@ export default function Dashboard() {
           description: errorMessage,
           variant: "destructive",
         });
+      } finally {
+        // Re-enable toggle after a delay to prevent rapid clicks
+        setTimeout(() => {
+          setIsTogglingBuzzer(false);
+        }, 500); // 500ms cooldown
       }
     } else {
       // Not connected - just show a message
@@ -415,6 +516,13 @@ export default function Dashboard() {
 
   // Handle Google Fit sign out
   const handleGoogleFitSignOut = () => {
+    // Stop monitoring before signing out
+    if (typeof window !== "undefined" && (window as any).__googleFitCleanup) {
+      console.log("🛑 Dashboard: Stopping Google Fit monitoring");
+      (window as any).__googleFitCleanup();
+      (window as any).__googleFitCleanup = null;
+    }
+
     googleFitService.signOut();
     setGoogleFitAuth({ isAuthenticated: false, user: null });
     setUseGoogleFit(false);
