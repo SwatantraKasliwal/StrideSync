@@ -246,7 +246,7 @@ Create a `.env.local` file in the project root:
 
 ```env
 # Google Fit API Configuration
-NEXT_PUBLIC_GOOGLE_CLIENT_ID=70059231909-3jds1hb6i37tbm40jgf77saino4vitq3.apps.googleusercontent.com
+NEXT_PUBLIC_GOOGLE_CLIENT_ID="your client id"
 ```
 
 **Note**: This is already configured with the project's Client ID. You can use this or replace with your own.
